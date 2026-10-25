@@ -1,0 +1,18 @@
+{
+  "name": "auto-auto",
+  "version": "0.1.0",
+  "private": true,
+  "description": "On-demand mobile auto maintenance: customer app, partner app, and ops console.",
+  "workspaces": [
+    "server"
+  ],
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "start": "npm run start --workspace server",
+    "dev": "npm run dev --workspace server",
+    "test": "npm test --workspace server",
+    "migrate": "npm run migrate --workspace server"
+  }
+}

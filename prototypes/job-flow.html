@@ -1,0 +1,236 @@
+<title>Auto-Auto Job Flow</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Manrope:wght@400;500;600;700;800&display=swap">
+<style>
+/* Layout: one job's life as a vertical track (left) with a three-app detail panel (right); decisions follow. */
+:root{
+ --bg:#F3F6FC;--panel:#FFFFFF;--ink:#0D1730;--muted:#5A6788;--line:#DCE3F2;
+ --brand:#1F5BFF;--brand-soft:#E6EEFF;--money:#B7791F;--money-soft:#FFF4DE;--ok:#14894E;--ok-soft:#E3F6EC;--warn:#B54708;--warn-soft:#FFEFD9;
+ --display:"Archivo","Arial Narrow",Arial,sans-serif;--body:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#070D1F;--panel:#0E1730;--ink:#EEF2FF;--muted:#94A2C8;--line:#22315A;--brand:#5B8CFF;--brand-soft:#16244D;--money:#F5B83D;--money-soft:#2E2410;--ok:#3FCB82;--ok-soft:#0F2A1D;--warn:#FF9F5A;--warn-soft:#33200F;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#070D1F;--panel:#0E1730;--ink:#EEF2FF;--muted:#94A2C8;--line:#22315A;--brand:#5B8CFF;--brand-soft:#16244D;--money:#F5B83D;--money-soft:#2E2410;--ok:#3FCB82;--ok-soft:#0F2A1D;--warn:#FF9F5A;--warn-soft:#33200F;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 56px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:-.01em}
+h1{font-size:clamp(28px,4vw,40px);font-weight:900}
+h2{font-size:22px;font-weight:800}
+h3{font-size:15px;font-weight:800}
+p{margin:0}
+.lede{color:var(--muted);max-width:68ch}
+.eyebrow{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--brand)}
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:13px;color:var(--muted)}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:800;border-radius:999px;padding:3px 10px;white-space:nowrap}
+.pill.set{background:var(--ok-soft);color:var(--ok)}
+.pill.gap{background:var(--warn-soft);color:var(--warn)}
+.flow{display:grid;grid-template-columns:300px minmax(0,1fr);gap:20px;align-items:start}
+.track{display:flex;flex-direction:column;gap:2px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px)}
+.step{display:grid;grid-template-columns:30px 1fr auto;gap:10px;align-items:center;text-align:left;border:1px solid transparent;background:none;border-radius:12px;padding:9px 10px;color:var(--ink);font:inherit;cursor:pointer}
+.step:hover{background:var(--panel)}
+.step[aria-selected="true"]{background:var(--panel);border-color:var(--brand)}
+.step:focus-visible,.opt:focus-visible,.btn:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+.num{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-family:var(--display);font-weight:800;font-size:13px;background:var(--brand-soft);color:var(--brand);font-variant-numeric:tabular-nums}
+.step[aria-selected="true"] .num{background:var(--brand);color:#fff}
+.step b{font-weight:800;font-size:14px}
+.step small{display:block;color:var(--muted);font-size:12px;line-height:1.3}
+.dot{width:9px;height:9px;border-radius:50%}
+.dot.set{background:var(--ok)}.dot.gap{background:var(--warn)}
+.detail{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.dhead{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.apps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.app{border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.app h3{display:flex;align-items:center;gap:8px}
+.app h3 i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.app ul,.facts ul,.wrong ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;font-size:14px}
+.app .none{color:var(--muted);font-size:14px}
+.facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.fact{border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.fact.saved{background:var(--brand-soft)}.fact.money{background:var(--money-soft)}.fact.alert{background:var(--bg)}
+.label{font-size:11.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.wrong{border-top:1px dashed var(--line);padding-top:14px;display:flex;flex-direction:column;gap:8px}
+.gapnote{background:var(--ok-soft);color:var(--ink);border-radius:12px;padding:12px 14px;font-size:14px;display:flex;gap:10px;align-items:flex-start}
+.gapnote b{color:var(--warn)}
+.linkbtn{background:none;border:0;color:var(--brand);font:inherit;font-weight:800;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.decs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.dec{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.dec.flash{border-color:var(--warn);box-shadow:0 0 0 3px var(--warn-soft)}
+.dec .q{font-family:var(--display);font-weight:800;font-size:17px}
+.dec .why{color:var(--muted);font-size:14px}
+.opt{display:grid;grid-template-columns:20px 1fr;gap:10px;text-align:left;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:10px 12px;font:inherit;color:var(--ink);cursor:pointer}
+.opt[aria-checked="true"]{border-color:var(--brand);background:var(--brand-soft)}
+.opt .rb{width:18px;height:18px;border-radius:50%;border:2px solid var(--muted);margin-top:2px;display:grid;place-items:center}
+.opt[aria-checked="true"] .rb{border-color:var(--brand)}
+.opt[aria-checked="true"] .rb::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--brand)}
+.opt b{font-weight:800;font-size:14px}
+.opt span{font-size:13px;color:var(--muted)}
+.rec{font-size:11px;font-weight:800;color:var(--ok);background:var(--ok-soft);border-radius:999px;padding:1px 8px;margin-left:6px;white-space:nowrap}
+.bar{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px 18px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+.btn{border:0;border-radius:12px;padding:12px 18px;font:inherit;font-weight:800;background:var(--brand);color:#fff;cursor:pointer}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+textarea{width:100%;min-height:150px;border:1px solid var(--line);border-radius:12px;padding:12px;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--bg);color:var(--ink)}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-weight:700;font-size:14px}
+@media (max-width:900px){.flow{grid-template-columns:1fr}.track{position:static;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}.apps,.facts{grid-template-columns:1fr}.decs{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:no-preference){.detail{transition:border-color .2s}}
+</style>
+
+<div class="wrap">
+ <header style="display:flex;flex-direction:column;gap:10px">
+  <span class="eyebrow">Auto-Auto · system blueprint</span>
+  <h1>One job, start to finish</h1>
+  <p class="lede">The three prototypes each act out their own side. In the real system they share one job record. Pick a step to see what the customer app, the partner app, and the Ops Console show at that moment, what gets saved, and where money moves. All six open rules were decided on Oct 25 and are now in all three prototypes.</p>
+  <div class="legend"><span class="pill set">● All 11 steps have rules set</span></div>
+ </header>
+
+ <section class="flow" aria-label="Job lifecycle">
+  <nav class="track" role="tablist" aria-label="Job steps" id="track"></nav>
+  <article class="detail" id="detail" role="tabpanel" aria-live="polite"></article>
+ </section>
+
+ <section style="display:flex;flex-direction:column;gap:14px" id="decisions">
+  <div style="display:flex;flex-direction:column;gap:6px"><span class="eyebrow">Decisions</span><h2>Six rules, decided Oct 25</h2><p class="lede">Your picks are marked. They're built into the customer app, partner app, and Ops Console (Pricing &amp; rules), and they become the rules in the backend. To change one later, pick a new option and paste your answers into the chat.</p></div>
+  <div class="decs" id="decs"></div>
+  <div class="bar"><span id="count" style="font-weight:700"></span><button class="btn" id="copy">Copy my answers</button></div>
+  <textarea id="out" readonly hidden aria-label="Your answers"></textarea>
+ </section>
+</div>
+
+<script>
+const STEPS=[
+ {k:"booked",t:"Booked",s:"Customer requests service",st:"set",d:["d3"],
+  cu:["Picks services, vehicle, place, and arrival window","Sees the price, the shop comparison, and the cancel rules","Chooses whether to approve the partner first","Address stays private"],
+  pa:[],ops:["Request shows on the demand map"],
+  saved:["Job record with services, vehicle, window, and locked price","Pricing version used (so later rate changes don't touch it)","Customer's place, hidden from partners"],
+  money:["Card is saved and checked","Jobs over $300: deposit charged now (25% or parts cost, whichever is higher)","Jobs up to $300: nothing charged yet","24 hrs before the visit: the estimate is held on the card"],
+  alerts:["Customer: Booking received"],
+  wrong:["Card can't be verified: booking can't be placed","Hold fails 24 hrs before: customer is asked to update the card"]},
+ {k:"matching",t:"Finding a partner",s:"Offers go out",st:"set",d:["d1","d2"],
+  cu:["\"Finding your partner\" with time left in the request window (4 hrs, roadside 1 hr)","Can cancel free"],
+  pa:["Instant job: 30-second offer with earnings, distance, parts needed","Scheduled job: shows on the Jobs board","Only partners whose service area covers the job, and who offer those services","Instant: closest qualified partner first, 30 sec each, up to 5 partners, then everyone in range at once"],
+  ops:["Waiting time per request","Requests close to their window end are flagged"],
+  saved:["Every offer: who got it, when, accepted, declined, or expired"],
+  money:["Nothing moves"],alerts:["Partners in range: new request"],
+  wrong:["Halfway through the window, the search widens to 35 miles automatically","Nobody accepts by the end: request closes, any deposit is refunded, customer gets the next open times"]},
+ {k:"approve",t:"Customer approves",s:"Only if they asked to",st:"set",d:["d4"],
+  cu:["Sees the partner's photo, rating, jobs done, certifications, reviews","Approve or pick someone else","Has 5 minutes (same day) or 2 hours (scheduled) to answer"],
+  pa:["\"Waiting for the customer to confirm\""],ops:[],
+  saved:["Approval or decline, with time"],money:["Nothing moves"],alerts:["Customer: Approve your partner"],
+  wrong:["Customer doesn't answer in time: the offer goes to the next partner and the customer is told"]},
+ {k:"confirmed",t:"Confirmed",s:"Partner locked in",st:"set",d:["d5","d6"],
+  cu:["Thank-you page","Job on their calendar","In-app chat and masked calling: real phone numbers are never shared"],
+  pa:["Job on the schedule","Parts step: from the truck, pick up on the way, or delivered","Parts card loads with the parts estimate + 10%"],
+  ops:["Parts card activity per job"],
+  saved:["Assigned partner","Parts plan and order"],
+  money:["Parts card loaded (Auto-Auto's money, not charged to anyone yet)","Customer cancels: free more than 48 hrs out, $25 inside 48 hrs, plus parts already bought (receipt required)"],
+  alerts:["Customer: Partner confirmed","Both: reminders 24 hrs and 2 hrs before"],
+  wrong:["Partner cancels more than 24 hrs out: free; job goes back out first in line","Partner cancels inside 24 hrs: counts against them, customer gets a $15 credit, 3 in 30 days starts a review","Customer reschedules (2 free, then $25)"]},
+ {k:"enroute",t:"On the way",s:"Partner starts the trip",st:"set",
+  cu:["Live map and arrival time","Partner's name, photo, and vehicle"],
+  pa:["Start Trip unlocks once parts are planned","Exact address appears now","Parts pickup is the first stop if needed"],
+  ops:["Jobs where the partner is late are flagged"],
+  saved:["Trip start time","Partner location during the trip only"],
+  money:["Customer cancel now costs the $50 on-the-way fee"],
+  alerts:["Customer: Your partner is on the way"],
+  wrong:["Partner hasn't left 30 min before the window: customer can switch to a backup partner or reschedule free with a credit"]},
+ {k:"arrived",t:"Arrived & check-in",s:"Photos before work",st:"set",
+  cu:["\"Your partner has arrived\"","Keys or lockbox instructions shown to the partner"],
+  pa:["360° and interior photos required before work starts","Note any existing damage"],
+  ops:[],saved:["Check-in photos with time stamps (evidence for claims)"],
+  money:["Customer not there after 15 min of calls and texts: no-show, $50 fee, partner keeps their share"],
+  alerts:["Customer: Your partner has arrived"],wrong:["Customer or vehicle missing"]},
+ {k:"working",t:"Working",s:"Add-ons need approval",st:"set",
+  cu:["Approve or decline add-on requests with the reason and price","Diagnose It: receives the repair quote"],
+  pa:["Add-on requests priced from the labor guide","Diagnostic quote built from the guide"],
+  ops:["Fleet add-ons over the fleet's auto-approve limit"],
+  saved:["Each add-on with approval time","Quote lines"],
+  money:["Approved add-ons are added to the total","Approved Diagnose It quote credits the $49 visit"],
+  alerts:["Customer: Add-on needs your OK"],wrong:["Customer doesn't answer an add-on: partner finishes the original job only"]},
+ {k:"wrap",t:"Wrap-up",s:"Proof of work",st:"set",
+  cu:["Waiting for the receipt"],
+  pa:["After photos required","Inspection report required","Products used and notes"],
+  ops:[],saved:["After photos and inspection report, added to the vehicle's service history"],
+  money:["Nothing moves until the partner taps Complete"],alerts:[],wrong:[]},
+ {k:"complete",t:"Completed",s:"Customer charged",st:"set",d:["d3"],
+  cu:["Receipt","Rate, review, and tip (tips open for 24 hrs)","Service history updated with photos and report","Warranty starts: 12 months or 12,000 miles"],
+  pa:["Earnings added: labor minus 20% fee, plus mobile fee, at least $35","Parts card locks","Own-stock parts added to parts reimbursement"],
+  ops:["Revenue and fee for the job"],
+  saved:["Final total, charge result, partner earnings"],
+  money:["Customer charged the final total, minus any deposit and credits (the 24-hr hold drops off)","Partner's balance goes up","Auto-Auto keeps the fee on labor and the parts markup"],
+  alerts:["Customer: Receipt and rating request","Partner: Earnings added"],
+  wrong:["Customer's card declines: the partner is still paid; Auto-Auto asks the customer to update the card and collects"]},
+ {k:"paid",t:"Paid out",s:"Money reaches the partner",st:"set",
+  cu:[],
+  pa:["Daily deposit at 9 PM (after 10 jobs) or Monday weekly","Instant cash-out any time for $0.85","Tips added when they come in"],
+  ops:["Daily and weekly payout batches","Holds and balances owed"],
+  saved:["Payout record with earnings and parts shown separately"],
+  money:["Transfer to the partner's bank or debit card","Open claim: only that job's pay is held","Money owed comes back at most 25% per payout"],
+  alerts:["Partner: Deposit sent"],wrong:[]},
+ {k:"after",t:"After the job",s:"Warranty & claims",st:"set",
+  cu:["Request a comeback under warranty","File a damage claim with photos"],
+  pa:["Respond to a claim within the deadline","Comeback work is redone at no charge"],
+  ops:["Claims queue compares check-in and after photos","Decides who pays; deductible recovered from payouts"],
+  saved:["Claim, responses, decision"],
+  money:["Partner Protection pays approved claims; partner owes the $500 deductible if at fault"],
+  alerts:["Both: claim updates"],wrong:[]}
+];
+const DECS=[
+ {id:"d1",q:"Who gets an instant request first?",why:"Shapes how fast customers get help and how fair it feels to partners.",o:[
+  ["Closest qualified partner first, one at a time","30 seconds each, up to 5 partners, then send to everyone in range at once. Like Uber.",1],
+  ["Best-rated partner nearby first","Rewards quality; may be slower for the customer."],
+  ["Send to everyone in range at once","First to accept gets it. Fastest, but partners race each other."]]},
+ {id:"d2",q:"What if no partner accepts in time?",why:"The prototypes don't say what happens when the request window runs out.",o:[
+  ["Widen the area halfway, then cancel and offer new times","At the halfway point the search widens. When the window ends, the request closes, any deposit is refunded, and the customer gets the next open times.",1],
+  ["Widen and add a $10 bonus paid by Auto-Auto","Fills more jobs; costs Auto-Auto on slow days."],
+  ["Keep it open until the customer cancels","Simple, but customers may wait without knowing."]]},
+ {id:"d3",q:"When do we hold the customer's card, and who loses if it declines?",why:"Card holds expire after about a week, so a job booked 2 weeks out can't be held at booking.",o:[
+  ["Hold the estimate 24 hrs before; partner is paid even if the charge fails","The hold makes declines rare. If one still fails, Auto-Auto takes the loss and collects from the customer.",1],
+  ["Hold at booking only for jobs in the next 5 days","Earlier check, but later bookings still need a second hold."],
+  ["No hold; charge at completion and pay the partner only if it succeeds","Cheapest for Auto-Auto, but partners carry the risk."]]},
+ {id:"d4",q:"How long does a customer get to approve their partner?",why:"Only applies when the customer turned on Approve partner.",o:[
+  ["Instant jobs 5 min, scheduled jobs 2 hrs; no answer goes to the next partner","Customer is told the offer moved on.",1],
+  ["No answer means approved","Faster, but defeats the purpose of the setting."],
+  ["Wait as long as they want","Partners can't plan around it."]]},
+ {id:"d5",q:"What happens when a partner cancels after accepting?",why:"The customer rules are set; the partner side isn't.",o:[
+  ["Free more than 24 hrs out; inside 24 hrs it counts against them and the customer gets a $15 credit","The job is re-offered right away with priority. 3 late cancels in 30 days triggers a review.",1],
+  ["Any cancel after accepting counts against them","Strict; may scare off new partners."],
+  ["Cancels are free; only the cancel rate is tracked","Easy on partners, hard on customers."]]},
+ {id:"d6",q:"How do customers and partners contact each other?",why:"Customer addresses are private until the trip starts; phone numbers need a rule too.",o:[
+  ["In-app chat plus masked calling","Calls go through a relay number. Real numbers are never shared. Costs a few cents per call.",1],
+  ["In-app chat only","Free, but harder when someone is driving or locked out."],
+  ["Share real numbers once the job is confirmed","Simplest, but partners could take customers off the app."]]}
+];
+const $=s=>document.querySelector(s);const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let cur="booked";let picks={};try{picks=JSON.parse(localStorage.getItem("aa-picks")||"{}")}catch(e){}
+DECS.forEach(d=>{if(picks[d.id]==null)picks[d.id]=d.o.findIndex(o=>o[2])});
+const list=a=>a&&a.length?`<ul>${a.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:`<p class="none">Nothing at this step.</p>`;
+function track(){$("#track").innerHTML=STEPS.map((s,i)=>`<button class="step" role="tab" id="tab-${s.k}" aria-selected="${s.k===cur}" data-k="${s.k}"><span class="num">${i+1}</span><span><b>${esc(s.t)}</b><small>${esc(s.s)}</small></span><span class="dot ${s.st}" title="${s.st==="gap"?"Needs a decision":"Rules set"}"></span></button>`).join("")}
+function detail(){const s=STEPS.find(x=>x.k===cur);const i=STEPS.indexOf(s);
+ const decs=(s.d||[]).map(id=>DECS.find(d=>d.id===id));
+ $("#detail").innerHTML=`<div class="dhead"><div style="display:flex;flex-direction:column;gap:4px"><span class="label">Step ${i+1} of ${STEPS.length}</span><h2>${esc(s.t)}</h2></div><span class="pill set">● Rules set</span></div>
+ <div class="apps">
+  <div class="app"><h3><i style="background:var(--brand)"></i>Customer app</h3>${list(s.cu)}</div>
+  <div class="app"><h3><i style="background:var(--money)"></i>Partner app</h3>${list(s.pa)}</div>
+  <div class="app"><h3><i style="background:var(--muted)"></i>Ops Console</h3>${list(s.ops)}</div>
+ </div>
+ <div class="facts">
+  <div class="fact saved"><span class="label">Saved to the job</span>${list(s.saved)}</div>
+  <div class="fact money"><span class="label">Money</span>${list(s.money)}</div>
+  <div class="fact alert"><span class="label">Alerts sent</span>${list(s.alerts)}</div>
+ </div>
+ ${s.wrong&&s.wrong.length?`<div class="wrong"><span class="label">If something goes wrong here</span>${list(s.wrong)}</div>`:""}
+ ${decs.map(d=>`<div class="gapnote"><b style="color:var(--ok)">Decided:</b><span>${esc(d.q)} ${esc(d.o[picks[d.id]][0])}. <button class="linkbtn" data-jump="${d.id}">See the rule</button></span></div>`).join("")}`}
+function decsHTML(){$("#decs").innerHTML=DECS.map((d,n)=>`<div class="dec" id="dec-${d.id}"><span class="label">Decision ${n+1}</span><span class="q">${esc(d.q)}</span><p class="why">${esc(d.why)}</p><div role="radiogroup" aria-label="${esc(d.q)}" style="display:flex;flex-direction:column;gap:8px">${d.o.map((o,i)=>`<button class="opt" role="radio" aria-checked="${picks[d.id]===i}" data-d="${d.id}" data-i="${i}"><span class="rb"></span><span><b>${esc(o[0])}</b>${o[2]?`<span class="rec">Recommended</span>`:""}<br><span>${esc(o[1])}</span></span></button>`).join("")}</div></div>`).join("");
+ const changed=DECS.filter(d=>!d.o[picks[d.id]][2]).length;$("#count").textContent=changed?`${changed} changed from what was decided. Copy and paste them into the chat to update the apps.`:"All six match what was decided on Oct 25"}
+function answers(){return "Auto-Auto job flow decisions:\n"+DECS.map((d,n)=>`${n+1}. ${d.q}\n   → ${d.o[picks[d.id]][0]}${d.o[picks[d.id]][2]?"":" (changed)"}`).join("\n")}
+function save(){try{localStorage.setItem("aa-picks",JSON.stringify(picks))}catch(e){}}
+function toast(t){const d=document.createElement("div");d.className="toast";d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),2200)}
+document.addEventListener("click",e=>{
+ const st=e.target.closest(".step");if(st){cur=st.dataset.k;track();detail();if(innerWidth<=900)$("#detail").scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"start"});return}
+ const j=e.target.closest("[data-jump]");if(j){const el=$("#dec-"+j.dataset.jump);el.scrollIntoView({behavior:"smooth",block:"center"});el.classList.add("flash");setTimeout(()=>el.classList.remove("flash"),1600);return}
+ const o=e.target.closest(".opt");if(o){picks[o.dataset.d]=+o.dataset.i;save();decsHTML();$(`.opt[data-d="${o.dataset.d}"][data-i="${o.dataset.i}"]`).focus();return}
+});
+$("#track").addEventListener("keydown",e=>{if(!["ArrowDown","ArrowUp","ArrowLeft","ArrowRight"].includes(e.key))return;e.preventDefault();const i=STEPS.findIndex(s=>s.k===cur);const n=(i+(e.key==="ArrowDown"||e.key==="ArrowRight"?1:-1)+STEPS.length)%STEPS.length;cur=STEPS[n].k;track();detail();$("#tab-"+cur).focus()});
+$("#copy").onclick=()=>{const t=answers();const out=$("#out");out.value=t;const fb=()=>{out.hidden=false;out.focus();out.select();toast("Select all and copy")};
+ try{navigator.clipboard.writeText(t).then(()=>{out.hidden=false;toast("Copied. Paste it into the chat.")},fb)}catch(e){fb()}};
+track();detail();decsHTML();
+</script>
