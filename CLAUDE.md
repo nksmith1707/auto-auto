@@ -6,3 +6,5 @@
 - Every endpoint gets tests in `server/test/`. Run `npm test`. CI runs the suite on SQLite and Postgres.
 - Never store or log card numbers, bank numbers, SSNs, raw tokens, or passwords. Store tokens hashed.
 - User-facing error messages are plain English and say how to fix the problem.
+- Phone apps: `apps/customer` and `apps/partner` (Expo SDK 57 so they run in the current Expo Go, Expo Router with routes in `src/app/`). Code both apps use lives in `apps/shared` and is imported by relative path; each app's `metro.config.js` makes that work. Keep `apps/shared/api.js` free of React Native imports so the server tests can run it.
+- The prototypes are the look: colors, fonts (Archivo + Manrope), and wording come from `prototypes/customer-app.html` and `prototypes/partner-app.html`. Add app packages with `npx expo install` so versions match the SDK.

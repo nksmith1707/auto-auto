@@ -33,3 +33,25 @@ jobs:
         run: npm test
         env:
           TEST_DATABASE_URL: ${{ matrix.database == 'postgres' && 'postgres://autoauto:autoauto@localhost:5432/autoauto_test' || '' }}
+
+  # Builds both phone apps for iPhone, Android, and web so a broken import or screen fails the push.
+  apps:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [customer, partner]
+    defaults:
+      run:
+        working-directory: apps/${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Build iPhone, Android, and web bundles
+        run: npx expo export --platform ios --platform android --platform web --output-dir /tmp/expo-${{ matrix.app }}
+        env:
+          CI: "1"
+          EXPO_OFFLINE: "1"
+          EXPO_NO_TELEMETRY: "1"

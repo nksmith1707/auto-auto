@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "Auto-Auto Partner",
+    "slug": "auto-auto-partner",
+    "scheme": "autoautopartner",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#060C1B",
+    "ios": {
+      "bundleIdentifier": "com.autoauto.partner",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "com.autoauto.partner",
+      "adaptiveIcon": {
+        "backgroundColor": "#0A1638",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "output": "single",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160,
+          "backgroundColor": "#060C1B"
+        }
+      ]
+    ]
+  }
+}

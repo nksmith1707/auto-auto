@@ -9,7 +9,7 @@ This repo holds the whole system:
 | `server/` | The API: accounts, jobs, pricing, payouts. Node 22, Postgres. Live at https://auto-auto-api.onrender.com | Accounts and sign-in done |
 | `prototypes/` | Clickable designs of the customer app, partner app, Ops Console, and job flow. Open any `.html` file in a browser. They're the spec for the real screens. | Done |
 | `docs/` | Business rules and build plan | Done |
-| `apps/customer`, `apps/partner` | Phone apps (Expo / React Native, one codebase for iPhone and Android) | Next |
+| `apps/customer`, `apps/partner` | Phone apps (Expo / React Native, one codebase for iPhone and Android). `apps/shared` holds the API client and screens both use. | Sign up, log in, log out, password reset |
 | `apps/ops` | Ops Console website | Later |
 
 ## Run the API on your computer
@@ -30,6 +30,37 @@ Create a staff account for the Ops Console:
 cd server
 ADMIN_PASSWORD='a long password' npm run create-admin -- you@company.com First Last
 ```
+
+## Run the phone apps
+
+The apps are built with Expo SDK 57, which is what the current **Expo Go** app on the App Store and Google Play runs. Install Expo Go on your phone, then:
+
+```bash
+cd apps/customer        # or apps/partner
+npm install
+npm start               # shows a QR code
+```
+
+Scan the QR code with your iPhone camera (or with Expo Go on Android). The app talks to the live API at https://auto-auto-api.onrender.com.
+
+To use a copy of the API running on your computer instead, start it with `npm run dev` in the repo root, then start the app with your computer's local network address (phones can't reach `localhost`):
+
+```bash
+EXPO_PUBLIC_API_URL=http://192.168.1.20:3000 npx expo start --clear
+```
+
+`--clear` matters whenever you change `EXPO_PUBLIC_API_URL`; otherwise the old address stays cached. Locally the API prints password reset emails to its terminal, so you can copy the code from there.
+
+| App | Screens so far |
+|---|---|
+| Customer (`apps/customer`) | Splash, Log in / Sign up, Forgot password, Enter reset code, Home with account details, Log out, Log out on all devices |
+| Partner (`apps/partner`) | Splash, Log in, Apply (create partner account), Forgot password, Enter reset code, Application status, Log out, Log out on all devices |
+
+Notes:
+- Sessions are kept in the phone's secure storage (Keychain on iPhone, Keystore on Android), so people stay signed in until they log out or their session expires.
+- Each app only accepts its own kind of account. A partner who tries the customer app (or the reverse) is told which app to use.
+- **Password reset emails don't go out from the live API yet.** The API makes the code, but no email provider is connected (see "Not decided yet" in `docs/RULES.md`). The reset screens work end to end against a local API.
+- The test suite covers the apps' API client against the real server code (`server/test/app-client.test.js`). CI also builds both apps for iPhone, Android, and web on every push.
 
 ## Deploy on Render
 

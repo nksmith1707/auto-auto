@@ -1,0 +1,6 @@
+{
+  "name": "@auto-auto/app-shared",
+  "private": true,
+  "description": "Code shared by the customer and partner apps: API client, sign-in state, UI building blocks. Tested from server/test/app-client.test.js.",
+  "type": "module"
+}
