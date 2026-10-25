@@ -31,16 +31,16 @@ cd server
 ADMIN_PASSWORD='a long password' npm run create-admin -- you@company.com First Last
 ```
 
-## Deploy on Railway
+## Deploy on Render
 
-1. In Railway, create a project, then **Deploy from GitHub repo** and pick `auto-auto`.
-2. In the same project, add **Database → PostgreSQL**.
-3. On the API service, open **Variables** and add:
-   - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`
-   - `NODE_ENV` = `production`
-   - `TRUST_PROXY` = `true`
-4. Under **Settings → Networking**, click **Generate Domain**. Under **Settings → Deploy**, set the healthcheck path to `/health`.
-5. Every push to `main` redeploys. Database changes apply automatically when the server starts.
+`render.yaml` sets up everything: the API service and a Postgres database (about $13/month on the Starter and Basic-256mb plans).
+
+1. Sign in at render.com with your GitHub account.
+2. Click **New → Blueprint**, pick the `auto-auto` repo, and click **Apply**.
+3. Wait for the first deploy to finish, then open the service's `.onrender.com` address followed by `/health`. You should see `{"ok":true}`.
+4. Every push to `main` redeploys. Database changes apply automatically when the server starts.
+
+The API runs anywhere that has Node 22 and Postgres. To use another host, set `DATABASE_URL`, `NODE_ENV=production`, and `TRUST_PROXY=true`, and run `npm install` then `npm start`.
 
 ## API so far
 

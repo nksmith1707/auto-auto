@@ -1,0 +1,25 @@
+# Render Blueprint: the API plus its Postgres database.
+# In Render: New → Blueprint → pick this repo. Render reads this file and creates both.
+services:
+  - type: web
+    name: auto-auto-api
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "true"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: auto-auto-db
+          property: connectionString
+
+databases:
+  - name: auto-auto-db
+    plan: basic-256mb
+    postgresMajorVersion: "16"
