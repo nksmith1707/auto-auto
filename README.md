@@ -6,7 +6,7 @@ This repo holds the whole system:
 
 | Folder | What it is | Status |
 |---|---|---|
-| `server/` | The API: accounts, jobs, pricing, payouts. Node 22, Postgres. | Accounts and sign-in done |
+| `server/` | The API: accounts, jobs, pricing, payouts. Node 22, Postgres. Live at https://auto-auto-api.onrender.com | Accounts and sign-in done |
 | `prototypes/` | Clickable designs of the customer app, partner app, Ops Console, and job flow. Open any `.html` file in a browser. They're the spec for the real screens. | Done |
 | `docs/` | Business rules and build plan | Done |
 | `apps/customer`, `apps/partner` | Phone apps (Expo / React Native, one codebase for iPhone and Android) | Next |
