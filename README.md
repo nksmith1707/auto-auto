@@ -53,8 +53,8 @@ EXPO_PUBLIC_API_URL=http://192.168.1.20:3000 npx expo start --clear
 
 | App | Screens so far |
 |---|---|
-| Customer (`apps/customer`) | Splash, Log in / Sign up, Forgot password, Enter reset code, Home (vehicles, places, account), Add/edit vehicle with VIN decode, Prices for each vehicle with a visit estimate, Add/edit saved place, Edit your details, Log out, Log out on all devices |
-| Partner (`apps/partner`) | Splash, Log in, Apply (create partner account), Forgot password, Enter reset code, Application checklist, Service area (home base + travel radius), Services you offer (with pay per job), Log out, Log out on all devices |
+| Customer (`apps/customer`) | Splash, Log in / Sign up, Forgot password, Enter reset code, Home (vehicles, places, account), Add/edit vehicle with VIN decode, Prices for each vehicle with a visit estimate, Book a visit (ASAP or a 2-hour window), Your visits, Visit details (approve partner, approve add-ons and glass quotes, reschedule, cancel with fee preview, receipt, inspection report, warranty), Add/edit saved place, Edit your details, Log out, Log out on all devices |
+| Partner (`apps/partner`) | Splash, Log in, Apply (create partner account), Forgot password, Enter reset code, Application checklist, Service area (home base + travel radius), Services you offer (with pay per job), Open jobs and Your jobs (approved partners), Job screen (accept, start trip, arrive, check in, add-ons, glass quote, inspection, complete, no-show, cancel), Log out, Log out on all devices |
 
 Notes:
 - Sessions are kept in the phone's secure storage (Keychain on iPhone, Keystore on Android), so people stay signed in until they log out or their session expires.
@@ -102,6 +102,18 @@ All requests and responses are JSON. Signed-in requests send `Authorization: Bea
 | GET | `/v1/pricing/menu` | Every service priced for a vehicle (`vehicleId` for customers, `make`/`model` for partners). Partners also see what they'd earn |
 | POST | `/v1/quotes` | A visit: `serviceIds` plus the vehicle. Returns lines, fees, total, deposit, card hold, and (partners/admins) partner pay |
 | POST | `/v1/quotes/glass` | Partners. Glass replacement price from `glassCost`, `serviceId`, `needsCalibration` |
+
+| GET | `/v1/jobs` | Your jobs (customers: bookings; partners: jobs you took) |
+| POST | `/v1/jobs` | Customers book: `vehicleId`, `placeId`, `serviceIds`, `kind` (`scheduled`, `asap`, `roadside`), `windowStart` for scheduled, `approvePartner`, `notes`. Price is locked with the settings version |
+| GET | `/v1/jobs/:id` | One job. Customers see their partner, add-ons, cancel fee preview, receipt. Partners see the area until Start trip, then the address |
+| GET | `/v1/jobs/board` | Approved partners: open jobs for services they offer |
+| POST | `/v1/jobs/:id/accept`, `start-trip`, `arrive`, `check-in`, `addons`, `glass-quote`, `complete`, `no-show` | Partner steps (`check-in` needs `odometer`; `complete` needs the 8-item `inspection`) |
+| POST | `/v1/jobs/:id/approve-partner`, `decline-partner`, `addons/:addonId/approve`, `addons/:addonId/decline`, `reschedule`, `switch-partner` | Customer steps |
+| POST | `/v1/jobs/:id/cancel` | Customer or partner. Applies the cancellation rules; send `expectedFeeCents` to confirm the fee you showed |
+| GET | `/v1/admin/partners` | Staff: partners with status and review flags |
+| POST | `/v1/admin/partners/:id/status` | Staff: `status` (`active` approves), `reason` (required to pause) |
+
+Approve a partner from the command line (until the Ops Console has a button): `npm run partner-status -- partner@email.com active` in the server folder, or in the Render shell.
 
 Money in every response is in whole cents (`priceCents: 8000` is $80.00). Each quote says which settings version it used.
 

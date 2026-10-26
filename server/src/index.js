@@ -20,7 +20,9 @@ for (let attempt = 1; ; attempt++) {
 }
 await migrate(db, { log: (m) => console.log(`[migrate] ${m}`) });
 
-const { server } = createApp({ db, config });
+const { server, jobs } = createApp({ db, config });
+// Close requests nobody accepted and approvals that ran out, once a minute.
+setInterval(() => jobs.sweep().catch((e) => console.error("[jobs] sweep failed", e)), 60_000).unref();
 server.listen(config.port, () => console.log(`Auto-Auto API listening on port ${config.port} (${config.nodeEnv})`));
 
 const stop = async () => {

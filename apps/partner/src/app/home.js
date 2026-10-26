@@ -3,7 +3,8 @@ import { useCallback, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { formatPhone } from "../../../shared/api";
+import { formatPhone, money } from "../../../shared/api";
+import { fmtLeft, fmtWindow } from "../../../shared/format";
 import { useAuth } from "../../../shared/session";
 import { Button, LinkButton, Notice } from "../../../shared/ui";
 import { fonts, p } from "../theme";
@@ -37,11 +38,43 @@ function Step({ n, title, sub, done, onPress, testID }) {
   return <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${title}${done ? ", done" : ""}`} testID={testID}>{body}</Pressable>;
 }
 
+const KIND = { scheduled: "", asap: "ASAP", roadside: "ROADSIDE" };
+function JobList({ title, jobs, empty, onOpen, board }) {
+  return (
+    <View style={{ gap: 8 }}>
+      <Text style={styles.label}>{title}</Text>
+      {!jobs.length && empty ? <Text style={{ fontFamily: fonts.body, fontSize: 14, color: p.muted }}>{empty}</Text> : null}
+      {jobs.map((j) => (
+        <Pressable key={j.id} onPress={() => onOpen(j.id)} accessibilityRole="button" testID={board ? "board-job" : "my-job"}
+          style={({ pressed }) => [styles.card, { gap: 4, padding: 14 }, pressed && { borderColor: p.brand }]}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Text style={{ flex: 1, fontFamily: fonts.displayX, fontSize: 16, color: p.ink }} numberOfLines={1}>{j.services.map((x) => x.name).concat(j.pendingQuotes.map((x) => x.name)).join(", ")}</Text>
+            <Text style={{ fontFamily: fonts.displayX, fontSize: 16, color: p.money }}>{money((j.final ? j.final.partnerPay : j.pay).earningsCents)}</Text>
+          </View>
+          <Text style={{ fontFamily: fonts.body, fontSize: 13, color: p.muted }}>
+            {KIND[j.kind] ? `${KIND[j.kind]} · ` : ""}{j.kind === "scheduled" ? fmtWindow(j.windowStart, j.windowEnd) : `open ${fmtLeft(j.requestExpiresAt - Date.now())} more`} · {j.area}
+          </Text>
+          <Text style={{ fontFamily: fonts.bodyB, fontSize: 12, color: board ? p.brandText : p.ok }}>{board ? `${j.vehicle.year} ${j.vehicle.make} ${j.vehicle.model}` : STATUS_TXT[j.status]}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+const STATUS_TXT = { requested: "Open", awaiting_approval: "Waiting for customer", confirmed: "Confirmed", en_route: "On the way", arrived: "Arrived", in_progress: "Working", completed: "Completed", cancelled: "Cancelled", expired: "Closed" };
+
 export default function Home() {
   const router = useRouter();
-  const { user, offline, refresh, signOut, signOutEverywhere } = useAuth();
-  // Pick up changes made on the service area and services screens.
-  useFocusEffect(useCallback(() => { refresh().catch(() => {}); }, [refresh]));
+  const { user, offline, refresh, call, signOut, signOutEverywhere } = useAuth();
+  const [jobs, setJobs] = useState({ mine: null, board: null, blocked: null });
+  const active = !!(user && user.partner && user.partner.status === "active");
+  const loadJobs = useCallback(async () => {
+    try {
+      const [m, b] = await Promise.all([call("jobs"), call("jobBoard")]);
+      setJobs({ mine: m.jobs, board: b.jobs, blocked: b.blocked });
+    } catch { /* shown as empty; pull to refresh */ }
+  }, [call]);
+  // Pick up changes made on other screens.
+  useFocusEffect(useCallback(() => { refresh().catch(() => {}); loadJobs(); }, [refresh, loadJobs]));
   const [confirmAll, setConfirmAll] = useState(false);
   const [busy, setBusy] = useState(null);
   const [err, setErr] = useState(null);
@@ -60,7 +93,7 @@ export default function Home() {
   }
   async function pull() {
     setRefreshing(true);
-    try { await refresh(); setErr(null); } catch (e) { setErr(e.message); } finally { setRefreshing(false); }
+    try { await refresh(); await loadJobs(); setErr(null); } catch (e) { setErr(e.message); } finally { setRefreshing(false); }
   }
 
   return (
@@ -79,6 +112,21 @@ export default function Home() {
 
           {offline ? <Notice tone="bad" style={{ marginBottom: 14 }}>You're offline. Showing your saved account until the connection comes back.</Notice> : null}
 
+          {active ? (
+            <View style={{ gap: 14, marginBottom: 14 }}>
+              <JobList title="Your jobs" empty="No jobs yet. Accept one below." jobs={(jobs.mine || []).filter((j) => !["completed", "cancelled", "expired"].includes(j.status))} onOpen={(id) => router.push({ pathname: "/job", params: { id } })} />
+              <JobList title="Open jobs" empty={jobs.board ? "No open jobs for your services right now. Pull down to refresh." : "Loading…"} jobs={jobs.board || []} onOpen={(id) => router.push({ pathname: "/job", params: { id } })} board />
+              {(jobs.mine || []).some((j) => j.status === "completed") ? (
+                <JobList title="Done" jobs={(jobs.mine || []).filter((j) => ["completed", "cancelled"].includes(j.status)).slice(0, 5)} onOpen={(id) => router.push({ pathname: "/job", params: { id } })} />
+              ) : null}
+              <View style={[styles.card, { gap: 4 }]}>
+                <Step n={1} title="Service area" sub={user.partner.serviceAreaSet ? "Set" : "Where you'll travel for jobs"} done={!!user.partner.serviceAreaSet} onPress={() => router.push("/service-area")} />
+                <Step n={2} title="Services you offer" sub={`${user.partner.servicesCount} turned on`} done={!!user.partner.servicesCount} onPress={() => router.push("/services")} />
+              </View>
+            </View>
+          ) : null}
+
+          {!active ? (
           <View style={styles.card}>
             <Text style={styles.label}>Your application</Text>
             <Text style={{ fontFamily: fonts.displayX, fontSize: 22, color: p.ink }} accessibilityRole="header">{st.label}</Text>
@@ -95,6 +143,7 @@ export default function Home() {
               </View>
             ) : null}
           </View>
+          ) : null}
 
           <View style={[styles.card, { marginTop: 14, gap: 0, paddingVertical: 4 }]}>
             {[["Name", `${user.firstName} ${user.lastName}`], ["Email", user.email], ["Mobile", user.phone ? formatPhone(user.phone) : "Not added"]].map(([k, v], i) => (

@@ -3,7 +3,8 @@ import { useCallback, useState } from "react";
 import { Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { GradientFill } from "../../../shared/Fill";
-import { formatPhone } from "../../../shared/api";
+import { formatPhone, money } from "../../../shared/api";
+import { STATUS_LABEL, fmtWindow } from "../../../shared/format";
 import { EngineLogo } from "../../../shared/Logo";
 import { useAuth } from "../../../shared/session";
 import { Button, Card, LinkButton, Notice, Screen, T, useTheme } from "../../../shared/ui";
@@ -29,7 +30,7 @@ export default function Home() {
   const t = useTheme();
   const router = useRouter();
   const { user, offline, call, signOut, signOutEverywhere } = useAuth();
-  const [data, setData] = useState({ vehicles: null, places: null });
+  const [data, setData] = useState({ vehicles: null, places: null, jobs: [] });
   const [loadErr, setLoadErr] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [confirmAll, setConfirmAll] = useState(false);
@@ -38,8 +39,8 @@ export default function Home() {
 
   const load = useCallback(async () => {
     try {
-      const [v, p] = await Promise.all([call("vehicles"), call("places")]);
-      setData({ vehicles: v.vehicles, places: p.places });
+      const [v, p, j] = await Promise.all([call("vehicles"), call("places"), call("jobs")]);
+      setData({ vehicles: v.vehicles, places: p.places, jobs: j.jobs });
       setLoadErr(null);
     } catch (e) {
       setLoadErr(e.message);
@@ -57,7 +58,9 @@ export default function Home() {
     try { await fn(); } catch (e) { setErr(e.message); setBusy(null); }
   }
 
-  const { vehicles, places } = data;
+  const { vehicles, places, jobs } = data;
+  const openJobs = jobs.filter((j) => !["completed", "cancelled", "expired"].includes(j.status));
+  const pastJobs = jobs.filter((j) => ["completed", "cancelled", "expired"].includes(j.status)).slice(0, 5);
   const loading = vehicles === null && !loadErr;
 
   return (
@@ -73,7 +76,7 @@ export default function Home() {
         <View style={{ flex: 1, gap: 4 }}>
           <Text style={{ fontFamily: t.f.displayX, fontSize: 26, color: "#fff" }}>Hi, {user.firstName}</Text>
           <Text style={{ fontFamily: t.f.body, fontSize: 14, color: "#DCE6FF", lineHeight: 20 }}>
-            {vehicles && vehicles.length && places && places.length ? "You're all set up. Booking service is coming next." : "Add your vehicle and where to meet you. Booking service is coming next."}
+            {openJobs.length ? `You have ${openJobs.length} visit${openJobs.length === 1 ? "" : "s"} coming up.` : vehicles && vehicles.length && places && places.length ? "Tap See prices on a vehicle to book service." : "Add your vehicle and where to meet you, then book service."}
           </Text>
         </View>
         <View><EngineLogo size={64} color="#BFD6FF" hole={t.p.brandDeep} /></View>
@@ -81,6 +84,23 @@ export default function Home() {
 
       {offline ? <Notice tone="bad" style={{ marginTop: 14 }}>You're offline. Showing your saved account until the connection comes back.</Notice> : null}
       {loadErr ? <Notice tone="bad" style={{ marginTop: 14 }}>{loadErr} Pull down to try again.</Notice> : null}
+
+      {/* Bookings */}
+      {openJobs.length || pastJobs.length ? (
+        <View style={{ marginTop: 22, gap: 10 }}>
+          <SectionHead title="Your visits" />
+          {[...openJobs, ...pastJobs].map((j) => (
+            <Card key={j.id} onPress={() => router.push({ pathname: "/job", params: { id: j.id } })} accessibilityLabel={`${STATUS_LABEL[j.status]}, ${j.vehicle.model}`} style={{ gap: 4 }} testID="job-card">
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <T style={{ fontFamily: t.f.displayX, fontSize: 16, flex: 1 }}>{STATUS_LABEL[j.status]}</T>
+                <T v="small" style={{ fontFamily: t.f.bodyB }}>{money((j.final || j.quote).totalCents)}</T>
+              </View>
+              <T v="small">{[...j.quote.lines, ...j.quote.pending].map((l) => l.name).join(", ")}</T>
+              <T v="hint">{j.vehicle.year} {j.vehicle.make} {j.vehicle.model} · {j.kind === "scheduled" ? fmtWindow(j.windowStart, j.windowEnd) : j.kind === "roadside" ? "Roadside" : "As soon as possible"}</T>
+            </Card>
+          ))}
+        </View>
+      ) : null}
 
       {/* Vehicles */}
       <View style={{ marginTop: 22, gap: 10 }}>

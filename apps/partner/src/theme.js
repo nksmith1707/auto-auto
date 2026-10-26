@@ -44,6 +44,7 @@ export const theme = {
     ghost: { box: { backgroundColor: "transparent", borderWidth: 1.5, borderColor: p.line }, text: { color: p.ink } },
     danger: { box: { backgroundColor: p.badSoft }, text: { color: p.bad } },
     money: { box: { backgroundColor: p.money }, text: { color: "#241800" } },
+    okb: { box: { backgroundColor: p.ok }, text: { color: "#03200F" } },
   },
   notice: {
     box: { borderWidth: 1, borderColor: p.line, borderRadius: 14, padding: 12 },

@@ -8,8 +8,10 @@ import { profileRoutes } from "./profiles/routes.js";
 import { createVinDecoder } from "./vehicles/vin.js";
 import { pricingRoutes } from "./pricing/routes.js";
 import { createSettingsStore } from "./pricing/settings.js";
+import { createJobs } from "./jobs/service.js";
+import { jobRoutes } from "./jobs/routes.js";
 
-export function createApp({ db, config, mailer = createMailer({ isProd: config.isProd }), log = console, vinFetch = config.vinLookup ? globalThis.fetch : null }) {
+export function createApp({ db, config, mailer = createMailer({ isProd: config.isProd }), log = console, vinFetch = config.vinLookup ? globalThis.fetch : null, now = () => Date.now() }) {
   const router = createRouter();
   const auth = createAuth({ db, config, mailer });
 
@@ -21,8 +23,10 @@ export function createApp({ db, config, mailer = createMailer({ isProd: config.i
   authRoutes(router, { auth, config });
   const vinDecode = createVinDecoder({ db, fetchImpl: vinFetch, log: (m) => log.log ? log.log(m) : undefined });
   profileRoutes(router, { db, auth, vinDecode });
-  const settings = createSettingsStore({ db });
+  const settings = createSettingsStore({ db, now });
   pricingRoutes(router, { db, auth, settings });
+  const jobs = createJobs({ db, settings, now });
+  jobRoutes(router, { db, auth, jobs, now });
 
   const server = http.createServer(async (req, res) => {
     const origin = req.headers.origin;
@@ -53,5 +57,5 @@ export function createApp({ db, config, mailer = createMailer({ isProd: config.i
   });
   server.requestTimeout = 15_000;
   server.headersTimeout = 10_000;
-  return { server, auth, mailer, settings };
+  return { server, auth, mailer, settings, jobs };
 }

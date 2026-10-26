@@ -80,6 +80,13 @@ export function createApi({ baseUrl = DEFAULT_API_URL, fetchImpl = globalThis.fe
     priceMenu: (token, q) => request("GET", `/v1/pricing/menu?${new URLSearchParams(Object.entries(q || {}).filter(([, v]) => v != null && v !== "")).toString()}`, { token }),
     quote: (token, body) => request("POST", "/v1/quotes", { token, body }),
 
+    jobs: (token) => request("GET", "/v1/jobs", { token }),
+    job: (token, id) => request("GET", `/v1/jobs/${encodeURIComponent(id)}`, { token }),
+    book: (token, body) => request("POST", "/v1/jobs", { token, body }),
+    jobBoard: (token) => request("GET", "/v1/jobs/board", { token }),
+    jobAction: (token, id, action, body) => request("POST", `/v1/jobs/${encodeURIComponent(id)}/${action}`, { token, body: body || {} }),
+    addonDecision: (token, id, addonId, approve) => request("POST", `/v1/jobs/${encodeURIComponent(id)}/addons/${encodeURIComponent(addonId)}/${approve ? "approve" : "decline"}`, { token, body: {} }),
+
     serviceArea: (token) => request("GET", "/v1/partner/service-area", { token }),
     saveServiceArea: (token, a) => request("PUT", "/v1/partner/service-area", { token, body: a }),
     partnerServices: (token) => request("GET", "/v1/partner/services", { token }),

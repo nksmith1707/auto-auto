@@ -1,11 +1,10 @@
 // Prices for one vehicle, from the server's pricing engine. Tap services to build an estimate for one visit.
-// Booking from here comes in the next step.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { money } from "../../../shared/api";
 import { useAuth } from "../../../shared/session";
-import { Card, Notice, Screen, T, useTheme } from "../../../shared/ui";
+import { Button, Card, Notice, Screen, T, useTheme } from "../../../shared/ui";
 import { TopBar } from "../components/TopBar";
 
 function detail(i) {
@@ -122,7 +121,7 @@ export default function Prices() {
                 </View>
               ) : null}
               {err ? <Notice tone="bad">{err}</Notice> : null}
-              <Notice><Text style={t.text.small}>Booking opens in the next update. For now this shows what a visit would cost.</Text></Notice>
+              <Button title="Book this visit" onPress={() => router.push({ pathname: "/book", params: { vehicleId, serviceIds: picked.join(",") } })} testID="book-visit" />
             </Card>
           ) : null}
         </View>
