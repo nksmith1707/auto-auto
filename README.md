@@ -33,7 +33,7 @@ ADMIN_PASSWORD='a long password' npm run create-admin -- you@company.com First L
 
 ## Run the phone apps
 
-The apps are built with Expo SDK 57, which is what the current **Expo Go** app on the App Store and Google Play runs. Install Expo Go on your phone, then:
+The apps are built with Expo SDK 58, which is what the current **Expo Go** app on the App Store and Google Play runs. When Expo Go moves to a new SDK, the apps have to be upgraded to match. Install Expo Go on your phone, then:
 
 ```bash
 cd apps/customer        # or apps/partner
