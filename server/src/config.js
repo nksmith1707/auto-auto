@@ -15,6 +15,8 @@ export function loadConfig(env = process.env) {
     // Trust X-Forwarded-For only behind a known proxy (Railway). Used for rate limiting.
     trustProxy: env.TRUST_PROXY === "true",
     appUrl: env.APP_URL || "http://localhost:3000",
+    // Look up VIN details (model, trim, engine) from NHTSA's free vPIC service. Off in tests; set VIN_LOOKUP=off to disable.
+    vinLookup: env.VIN_LOOKUP ? env.VIN_LOOKUP !== "off" : nodeEnv !== "test",
   };
   if (config.isProd && config.databaseUrl.startsWith("sqlite")) {
     throw new Error("DATABASE_URL must point to Postgres in production.");

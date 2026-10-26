@@ -5,7 +5,7 @@ import { Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { passwordHint } from "../../../shared/api";
 import { useAuth } from "../../../shared/session";
-import { Button, Checkbox, Field, LinkButton, Notice, Screen, T, errorParts } from "../../../shared/ui";
+import { Button, Checkbox, Field, LinkButton, Notice, Screen, T, errorParts, dropFieldError } from "../../../shared/ui";
 import { HeroFade } from "../components/Backdrops";
 import { TopBar } from "../components/TopBar";
 import { fonts, p } from "../theme";
@@ -24,7 +24,7 @@ export default function Apply() {
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const refs = { lastName: useRef(null), email: useRef(null), phone: useRef(null), password: useRef(null) };
-  const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
+  const set = (k) => (v) => { setForm((f) => ({ ...f, [k]: v })); setErr(dropFieldError(k)); };
   const next = (k) => () => refs[k].current && refs[k].current.focus();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/sign-in"));
 

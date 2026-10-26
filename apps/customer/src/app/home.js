@@ -1,20 +1,63 @@
-// Signed-in home. For now it shows the account; booking, vehicles, and saved places come in later steps.
-import { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+// Signed-in home: vehicles, saved places, and account. Booking comes in later steps.
+import { useCallback, useState } from "react";
+import { RefreshControl, StyleSheet, Text, View } from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { formatPhone } from "../../../shared/api";
 import { EngineLogo } from "../../../shared/Logo";
 import { useAuth } from "../../../shared/session";
-import { Button, LinkButton, Notice, Screen, T, useTheme } from "../../../shared/ui";
+import { Button, Card, LinkButton, Notice, Screen, T, useTheme } from "../../../shared/ui";
 
-const fmtDate = (ms) => new Date(ms).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+const FUEL = { gas: "Gas", diesel: "Diesel", hybrid: "Hybrid", electric: "Electric" };
+const PARK = { driveway: "Driveway", street: "Street parking", lot: "Parking lot", garage: "Garage", other: "Other" };
+
+function Gradient({ id, from, to }) {
+  return (
+    <Svg style={StyleSheet.absoluteFill} width="100%" height="100%" preserveAspectRatio="none">
+      <Defs>
+        <LinearGradient id={id} x1="0" y1="0" x2="1" y2="1">
+          <Stop offset="0" stopColor={from} />
+          <Stop offset="1" stopColor={to} />
+        </LinearGradient>
+      </Defs>
+      <Rect width="100%" height="100%" fill={`url(#${id})`} />
+    </Svg>
+  );
+}
+
+function SectionHead({ title, action, onAction, testID }) {
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+      <T v="title" accessibilityRole="header">{title}</T>
+      {action ? <LinkButton title={action} onPress={onAction} textStyle={{ fontSize: 15 }} /> : null}
+    </View>
+  );
+}
 
 export default function Home() {
   const t = useTheme();
-  const { user, offline, signOut, signOutEverywhere } = useAuth();
+  const router = useRouter();
+  const { user, offline, call, signOut, signOutEverywhere } = useAuth();
+  const [data, setData] = useState({ vehicles: null, places: null });
+  const [loadErr, setLoadErr] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [confirmAll, setConfirmAll] = useState(false);
   const [busy, setBusy] = useState(null);
   const [err, setErr] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      const [v, p] = await Promise.all([call("vehicles"), call("places")]);
+      setData({ vehicles: v.vehicles, places: p.places });
+      setLoadErr(null);
+    } catch (e) {
+      setLoadErr(e.message);
+    }
+  }, [call]);
+
+  // Reload whenever the screen comes back into view (after adding or editing).
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+
   if (!user) return null;
 
   async function run(which, fn) {
@@ -23,43 +66,88 @@ export default function Home() {
     try { await fn(); } catch (e) { setErr(e.message); setBusy(null); }
   }
 
-  const rows = [
-    ["Name", `${user.firstName} ${user.lastName}`],
-    ["Email", user.email],
-    ["Mobile", user.phone ? formatPhone(user.phone) : "Not added"],
-    ["Member since", fmtDate(user.createdAt)],
-  ];
+  const { vehicles, places } = data;
+  const loading = vehicles === null && !loadErr;
 
   return (
-    <Screen contentStyle={{ paddingBottom: 24 }}>
+    <Screen contentStyle={{ paddingBottom: 24 }}
+      refreshControl={<RefreshControl refreshing={refreshing} tintColor={t.c.muted} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} />}>
       <View style={{ alignItems: "center", paddingTop: 12, paddingBottom: 10 }}>
         <T style={{ fontFamily: t.f.displayX, fontSize: 24, color: t.c.brand, letterSpacing: 0.5 }}>Auto-Auto</T>
         <T style={{ fontFamily: t.f.bodyB, fontSize: 11, letterSpacing: 1.76, textTransform: "uppercase", color: t.c.muted }}>Keep Moving Forward</T>
       </View>
 
-      <View style={styles.hero} accessible accessibilityLabel={`Hi ${user.firstName}. You're signed in.`}>
-        <Svg style={StyleSheet.absoluteFill} width="100%" height="100%" preserveAspectRatio="none">
-          <Defs>
-            <LinearGradient id="hero" x1="0" y1="0" x2="1" y2="1">
-              <Stop offset="0" stopColor={t.p.brandDeep} />
-              <Stop offset="1" stopColor={t.p.brand} />
-            </LinearGradient>
-          </Defs>
-          <Rect width="100%" height="100%" fill="url(#hero)" />
-        </Svg>
+      <View style={styles.hero} accessible accessibilityLabel={`Hi ${user.firstName}.`}>
+        <Gradient id="hero" from={t.p.brandDeep} to={t.p.brand} />
         <View style={{ flex: 1, gap: 4 }}>
           <Text style={{ fontFamily: t.f.displayX, fontSize: 26, color: "#fff" }}>Hi, {user.firstName}</Text>
-          <Text style={{ fontFamily: t.f.body, fontSize: 14, color: "#DCE6FF", lineHeight: 20 }}>You're signed in. Adding vehicles and booking service are next.</Text>
+          <Text style={{ fontFamily: t.f.body, fontSize: 14, color: "#DCE6FF", lineHeight: 20 }}>
+            {vehicles && vehicles.length && places && places.length ? "You're all set up. Booking service is coming next." : "Add your vehicle and where to meet you. Booking service is coming next."}
+          </Text>
         </View>
         <View><EngineLogo size={64} color="#BFD6FF" hole={t.p.brandDeep} /></View>
       </View>
 
       {offline ? <Notice tone="bad" style={{ marginTop: 14 }}>You're offline. Showing your saved account until the connection comes back.</Notice> : null}
+      {loadErr ? <Notice tone="bad" style={{ marginTop: 14 }}>{loadErr} Pull down to try again.</Notice> : null}
 
+      {/* Vehicles */}
       <View style={{ marginTop: 22, gap: 10 }}>
-        <T v="title" accessibilityRole="header">Your account</T>
+        <SectionHead title="Your vehicles" action={vehicles && vehicles.length ? "+ Add" : null} onAction={() => router.push("/vehicle")} />
+        {loading ? <T v="muted">Loading…</T> : null}
+        {vehicles && !vehicles.length ? (
+          <Card style={{ gap: 10, alignItems: "center", paddingVertical: 20 }}>
+            <T v="muted" style={{ textAlign: "center" }}>Add your vehicle so partners bring the right parts and oil.</T>
+            <Button title="Add a vehicle" onPress={() => router.push("/vehicle")} style={{ alignSelf: "stretch" }} testID="add-vehicle" />
+          </Card>
+        ) : null}
+        {(vehicles || []).map((v) => (
+          <Card key={v.id} onPress={() => router.push({ pathname: "/vehicle", params: { id: v.id } })} accessibilityLabel={`Edit ${v.year} ${v.make} ${v.model}`}
+            style={{ overflow: "hidden", borderWidth: 0, padding: 16, gap: 8 }} testID="vehicle-card">
+            <Gradient id={`v${v.id}`} from={t.p.brandDeep} to={t.p.brand} />
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontFamily: t.f.displayX, fontSize: 20, color: "#fff" }}>{v.year} {v.make} {v.model}</Text>
+                {v.trim || v.color ? <Text style={{ fontFamily: t.f.body, fontSize: 14, color: "#DCE6FF" }}>{[v.trim, v.color].filter(Boolean).join(" · ")}</Text> : null}
+              </View>
+              <Text style={{ fontFamily: t.f.bodyB, fontSize: 13, color: "#DCE6FF" }}>Edit</Text>
+            </View>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+              {[FUEL[v.fuel], v.mileage != null ? `${v.mileage.toLocaleString("en-US")} mi` : null, v.plate ? `${v.plate}${v.plateState ? ` · ${v.plateState}` : ""}` : null, v.vin ? "VIN on file" : null]
+                .filter(Boolean).map((x) => (
+                  <View key={x} style={styles.pill}><Text style={{ fontFamily: t.f.bodyB, fontSize: 12, color: "#fff" }}>{x}</Text></View>
+                ))}
+            </View>
+          </Card>
+        ))}
+      </View>
+
+      {/* Places */}
+      <View style={{ marginTop: 22, gap: 10 }}>
+        <SectionHead title="Where we meet you" action={places && places.length ? "+ Add" : null} onAction={() => router.push("/place")} />
+        {places && !places.length ? (
+          <Card style={{ gap: 10, alignItems: "center", paddingVertical: 20 }}>
+            <T v="muted" style={{ textAlign: "center" }}>Save your home or work address. It stays private until your partner starts driving to you.</T>
+            <Button title="Add a place" onPress={() => router.push("/place")} style={{ alignSelf: "stretch" }} testID="add-place" />
+          </Card>
+        ) : null}
+        {(places || []).map((p) => (
+          <Card key={p.id} onPress={() => router.push({ pathname: "/place", params: { id: p.id } })} accessibilityLabel={`Edit ${p.label}`} style={{ gap: 4 }} testID="place-card">
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <T style={{ fontFamily: t.f.displayX, fontSize: 17, flex: 1 }}>{p.label}</T>
+              {p.isDefault ? <View style={[styles.tag, { backgroundColor: t.c.brandSoft }]}><Text style={{ fontFamily: t.f.bodyB, fontSize: 11, color: t.c.brand }}>Default</Text></View> : null}
+            </View>
+            <T v="small">{p.street}{p.unit ? `, ${p.unit}` : ""}</T>
+            <T v="hint">{p.city}, {p.state} {p.zip}{p.parking ? ` · ${PARK[p.parking]}` : ""}</T>
+          </Card>
+        ))}
+      </View>
+
+      {/* Account */}
+      <View style={{ marginTop: 22, gap: 10 }}>
+        <SectionHead title="Your account" action="Edit" onAction={() => router.push("/profile")} />
         <View style={[styles.card, { borderColor: t.c.line, backgroundColor: t.c.surface }]}>
-          {rows.map(([k, v], i) => (
+          {[["Name", `${user.firstName} ${user.lastName}`], ["Email", user.email], ["Mobile", user.phone ? formatPhone(user.phone) : "Not added"]].map(([k, v], i) => (
             <View key={k} style={[styles.row, i > 0 && { borderTopWidth: 1, borderTopColor: t.c.line }]}>
               <Text style={t.text.label}>{k}</Text>
               <Text style={[t.text.body, { flexShrink: 1, textAlign: "right" }]} selectable>{v}</Text>
@@ -67,10 +155,6 @@ export default function Home() {
           ))}
         </View>
       </View>
-
-      <Notice style={{ marginTop: 16 }}>
-        Partners only see your general area. Your exact address goes to the one partner you book, and only when they start driving to you.
-      </Notice>
 
       <View style={{ marginTop: "auto", paddingTop: 28, gap: 10 }}>
         {err ? <Notice tone="bad">{err}</Notice> : null}
@@ -95,4 +179,6 @@ const styles = StyleSheet.create({
   hero: { borderRadius: 20, overflow: "hidden", padding: 16, flexDirection: "row", alignItems: "center", gap: 12 },
   card: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 14 },
   row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingVertical: 13 },
+  pill: { backgroundColor: "rgba(255,255,255,0.16)", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
+  tag: { borderRadius: 20, paddingHorizontal: 9, paddingVertical: 3 },
 });

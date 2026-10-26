@@ -5,7 +5,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { EngineLogo } from "../../../shared/Logo";
 import { useAuth } from "../../../shared/session";
 import { passwordHint } from "../../../shared/api";
-import { Button, Checkbox, Field, LinkButton, Notice, Screen, T, Tabs, errorParts, useTheme } from "../../../shared/ui";
+import { Button, Checkbox, Field, LinkButton, Notice, Screen, T, Tabs, errorParts, useTheme, dropFieldError } from "../../../shared/ui";
 
 export default function SignIn() {
   const t = useTheme();
@@ -22,7 +22,7 @@ export default function SignIn() {
   }, [params.notice]);
   const refs = { lastName: useRef(null), email: useRef(null), phone: useRef(null), password: useRef(null) };
   const login = tab === "login";
-  const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
+  const set = (k) => (v) => { setForm((f) => ({ ...f, [k]: v })); setErr(dropFieldError(k)); };
   const next = (k) => () => refs[k].current && refs[k].current.focus();
 
   function switchTab(k) { setTab(k); setErr(null); setNotice(null); }

@@ -1,6 +1,7 @@
 // Signed-in partner home. Until the partner is approved, this is their application status.
-import { useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useCallback, useState } from "react";
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { formatPhone } from "../../../shared/api";
 import { useAuth } from "../../../shared/session";
@@ -8,7 +9,7 @@ import { Button, LinkButton, Notice } from "../../../shared/ui";
 import { fonts, p } from "../theme";
 
 const STATUS = {
-  applicant: { label: "Application started", tone: "money", text: "Your account is set up. Next you'll add your business and tax details, ID and driving record, background check, services, payout account, and sign the partner agreements." },
+  applicant: { label: "Application started", tone: "money", text: "Set your service area and the services you offer now. Business and tax details, ID, background check, proof of certifications, payouts, and agreements open in upcoming updates." },
   in_review: { label: "In review", tone: "brand", text: "We're reviewing your application. We'll let you know as soon as there's a decision." },
   active: { label: "Approved", tone: "ok", text: "You're approved. Jobs near you will show up here." },
   paused: { label: "Paused", tone: "bad", text: "Your account is paused, so you won't get new jobs. Contact partner support to get back on the road." },
@@ -17,10 +18,30 @@ const STATUS = {
 const CHIP = {
   money: { bg: p.moneySoft, fg: p.money }, brand: { bg: p.brandSoft, fg: p.brandText }, ok: { bg: p.okSoft, fg: p.ok }, bad: { bg: p.badSoft, fg: p.bad },
 };
-const STEPS = ["Account", "Business & tax (W-9)", "Identity & driving", "Background check", "Services & certifications", "Payouts", "Agreements", "Review & submit"];
+const LATER = ["Business & tax (W-9)", "Identity & driving", "Background check", "Certifications & insurance", "Payouts", "Agreements", "Review & submit"];
+
+function Step({ n, title, sub, done, onPress, testID }) {
+  const body = (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: onPress ? 6 : 0 }}>
+      <View style={[styles.dot, done ? { backgroundColor: p.ok, borderColor: p.ok } : onPress ? { borderColor: p.money } : null]}>
+        <Text style={{ fontFamily: fonts.bodyX, fontSize: 11, color: done ? "#03200F" : onPress ? p.money : p.muted }}>{done ? "✓" : n}</Text>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontFamily: done || onPress ? fonts.bodyB : fonts.body, fontSize: 14, color: done || onPress ? p.ink : p.muted }}>{title}</Text>
+        {sub ? <Text style={{ fontFamily: fonts.body, fontSize: 12, color: p.muted }}>{sub}</Text> : null}
+      </View>
+      {done ? <Text style={{ fontFamily: fonts.bodyX, fontSize: 11, color: p.ok }}>{onPress ? "EDIT" : "DONE"}</Text> : onPress ? <Text style={{ fontFamily: fonts.bodyX, fontSize: 11, color: p.money }}>START ›</Text> : null}
+    </View>
+  );
+  if (!onPress) return body;
+  return <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${title}${done ? ", done" : ""}`} testID={testID}>{body}</Pressable>;
+}
 
 export default function Home() {
+  const router = useRouter();
   const { user, offline, refresh, signOut, signOutEverywhere } = useAuth();
+  // Pick up changes made on the service area and services screens.
+  useFocusEffect(useCallback(() => { refresh().catch(() => {}); }, [refresh]));
   const [confirmAll, setConfirmAll] = useState(false);
   const [busy, setBusy] = useState(null);
   const [err, setErr] = useState(null);
@@ -64,17 +85,12 @@ export default function Home() {
             <Text style={{ fontFamily: fonts.body, fontSize: 14, lineHeight: 20, color: p.muted }}>{st.text}</Text>
             {applying ? (
               <View style={{ gap: 10, marginTop: 6 }}>
-                {STEPS.map((s, i) => (
-                  <View key={s} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                    <View style={[styles.dot, i === 0 ? { backgroundColor: p.ok, borderColor: p.ok } : null]}>
-                      <Text style={{ fontFamily: fonts.bodyX, fontSize: 11, color: i === 0 ? "#03200F" : p.muted }}>{i === 0 ? "✓" : i + 1}</Text>
-                    </View>
-                    <Text style={{ flex: 1, fontFamily: i === 0 ? fonts.bodyB : fonts.body, fontSize: 14, color: i === 0 ? p.ink : p.muted }}>{s}</Text>
-                    {i === 0 ? <Text style={{ fontFamily: fonts.bodyX, fontSize: 11, color: p.ok }}>DONE</Text> : null}
-                  </View>
-                ))}
+                <Step n={1} title="Account" done />
+                <Step n={2} title="Service area" sub={user.partner && user.partner.serviceAreaSet ? "Set" : "Where you'll travel for jobs"} done={!!(user.partner && user.partner.serviceAreaSet)} onPress={() => router.push("/service-area")} testID="step-area" />
+                <Step n={3} title="Services you offer" sub={user.partner && user.partner.servicesCount ? `${user.partner.servicesCount} turned on` : "Pick the work you do"} done={!!(user.partner && user.partner.servicesCount)} onPress={() => router.push("/services")} testID="step-services" />
+                {LATER.map((s, i) => <Step key={s} n={i + 4} title={s} />)}
                 <Notice style={{ marginTop: 4, backgroundColor: p.panel2 }}>
-                  <Text style={{ fontFamily: fonts.body, fontSize: 13, lineHeight: 19, color: p.ink }}>The rest of the application opens in an upcoming update. You'll finish it here in the app; nothing else is needed from you yet.</Text>
+                  <Text style={{ fontFamily: fonts.body, fontSize: 13, lineHeight: 19, color: p.ink }}>Steps 4 to 10 open in upcoming updates. You'll finish everything here in the app; nothing else is needed from you yet.</Text>
                 </Notice>
               </View>
             ) : null}

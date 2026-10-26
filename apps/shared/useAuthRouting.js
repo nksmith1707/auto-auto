@@ -17,6 +17,6 @@ export function useAuthRouting(status, { signInRoute = "sign-in", homeRoute = "h
     if (current === "index") return; // "/" redirects on its own.
     const onPublic = current === signInRoute || publicRoutes.includes(current);
     if (status === "signedOut" && ((changed && current !== signInRoute) || !onPublic)) router.replace(`/${signInRoute}`);
-    else if (status === "signedIn" && current !== homeRoute) router.replace(`/${homeRoute}`);
+    else if (status === "signedIn" && (changed || onPublic) && current !== homeRoute) router.replace(`/${homeRoute}`);
   }, [status, current, signInRoute, homeRoute, publicRoutes, router]);
 }

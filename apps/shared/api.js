@@ -60,6 +60,26 @@ export function createApi({ baseUrl = DEFAULT_API_URL, fetchImpl = globalThis.fe
     me: (token) => request("GET", "/v1/me", { token }),
     requestReset: (email) => request("POST", "/v1/auth/password-reset", { body: { email } }),
     confirmReset: ({ token, password }) => request("POST", "/v1/auth/password-reset/confirm", { body: { token, password } }),
+    updateMe: (token, fields) => request("PATCH", "/v1/me", { token, body: fields }),
+
+    catalog: (token) => request("GET", "/v1/catalog/services", { token }),
+    decodeVin: (token, vin) => request("GET", `/v1/vin/${encodeURIComponent(String(vin).trim())}`, { token }),
+
+    vehicles: (token) => request("GET", "/v1/vehicles", { token }),
+    vehicle: (token, id) => request("GET", `/v1/vehicles/${encodeURIComponent(id)}`, { token }),
+    addVehicle: (token, v) => request("POST", "/v1/vehicles", { token, body: v }),
+    updateVehicle: (token, id, v) => request("PATCH", `/v1/vehicles/${encodeURIComponent(id)}`, { token, body: v }),
+    removeVehicle: (token, id) => request("DELETE", `/v1/vehicles/${encodeURIComponent(id)}`, { token }),
+
+    places: (token) => request("GET", "/v1/places", { token }),
+    addPlace: (token, p) => request("POST", "/v1/places", { token, body: p }),
+    updatePlace: (token, id, p) => request("PATCH", `/v1/places/${encodeURIComponent(id)}`, { token, body: p }),
+    removePlace: (token, id) => request("DELETE", `/v1/places/${encodeURIComponent(id)}`, { token }),
+
+    serviceArea: (token) => request("GET", "/v1/partner/service-area", { token }),
+    saveServiceArea: (token, a) => request("PUT", "/v1/partner/service-area", { token, body: a }),
+    partnerServices: (token) => request("GET", "/v1/partner/services", { token }),
+    savePartnerServices: (token, serviceIds) => request("PUT", "/v1/partner/services", { token, body: { serviceIds } }),
   };
 }
 

@@ -8,10 +8,10 @@ export const ThemeProvider = ({ theme, children }) => <ThemeContext.Provider val
 export const useTheme = () => useContext(ThemeContext);
 
 // A scrolling page that stays clear of the notch and the keyboard.
-export function Screen({ children, style, contentStyle, background, scroll = true }) {
+export function Screen({ children, style, contentStyle, background, scroll = true, refreshControl }) {
   const t = useTheme();
   const body = scroll ? (
-    <ScrollView contentContainerStyle={[{ flexGrow: 1, paddingHorizontal: 16 }, contentStyle]} keyboardShouldPersistTaps="handled">
+    <ScrollView contentContainerStyle={[{ flexGrow: 1, paddingHorizontal: 16 }, contentStyle]} keyboardShouldPersistTaps="handled" refreshControl={refreshControl}>
       <View style={{ flex: 1, width: "100%", maxWidth: t.maxWidth, alignSelf: "center" }}>{children}</View>
     </ScrollView>
   ) : children;
@@ -38,7 +38,8 @@ export const Field = forwardRef(function Field({ label, error, hint, style, secu
       <View>
         <TextInput
           ref={ref}
-          style={[t.input, focus && { borderColor: t.c.brand }, error && { borderColor: t.c.bad }, secure && { paddingRight: 64 }]}
+          style={[t.input, input.multiline && { minHeight: 90, textAlignVertical: "top" }, input.editable === false && { opacity: 0.6 },
+            focus && { borderColor: t.c.brand }, error && { borderColor: t.c.bad }, secure && { paddingRight: 64 }]}
           placeholderTextColor={t.c.placeholder}
           onFocus={() => setFocus(true)}
           onBlur={() => setFocus(false)}
@@ -128,6 +129,64 @@ export function Tabs({ value, onChange, options }) {
   );
 }
 
+// Pick one from a few choices (fuel type, parking, oil). options: [[value, label], ...]
+export function Chips({ label, value, onChange, options, error, allowNone = false, testID }) {
+  const t = useTheme();
+  return (
+    <View style={{ gap: 6 }} testID={testID}>
+      {label ? <Text style={t.text.label}>{label}</Text> : null}
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }} accessibilityRole="radiogroup" accessibilityLabel={label}>
+        {options.map(([v, l]) => {
+          const on = v === value;
+          return (
+            <Pressable key={String(v)} onPress={() => onChange(on && allowNone ? null : v)} accessibilityRole="radio" accessibilityState={{ checked: on }}
+              style={[styles.chip, { borderColor: on ? t.c.brand : t.c.line, backgroundColor: on ? t.c.brand : t.c.inputBg }]}>
+              <Text style={{ fontFamily: t.f.bodyB, fontSize: 14, color: on ? "#fff" : t.c.ink }}>{l}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {error ? <Text style={t.text.err}>{error}</Text> : null}
+    </View>
+  );
+}
+
+// A bordered box for lists and summaries.
+export function Card({ children, style, onPress, accessibilityLabel, testID }) {
+  const t = useTheme();
+  const box = [{ borderWidth: 1, borderColor: t.c.line, backgroundColor: t.c.surface, borderRadius: 16, padding: 14 }, style];
+  if (!onPress) return <View style={box} testID={testID}>{children}</View>;
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={accessibilityLabel} testID={testID}
+      style={({ pressed }) => [box, pressed && { borderColor: t.c.brand }]}>
+      {children}
+    </Pressable>
+  );
+}
+
+// "Remove" with an inline are-you-sure, since pop-up alerts don't work everywhere.
+export function ConfirmRemove({ label, question, onConfirm, testID }) {
+  const t = useTheme();
+  const [ask, setAsk] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  if (!ask) return <LinkButton title={label} onPress={() => setAsk(true)} style={{ alignSelf: "center" }} textStyle={{ color: t.c.bad }} />;
+  return (
+    <View style={{ gap: 10 }}>
+      <Text style={[t.text.small, { textAlign: "center" }]}>{question}</Text>
+      {err ? <Notice tone="bad">{err}</Notice> : null}
+      <View style={{ flexDirection: "row", gap: 10 }}>
+        <Button style={{ flex: 1 }} title="Keep" variant="ghost" onPress={() => setAsk(false)} />
+        <Button style={{ flex: 1 }} title="Remove" variant="danger" loading={busy} testID={testID}
+          onPress={async () => { setErr(null); setBusy(true); try { await onConfirm(); } catch (e) { setErr(e.message); setBusy(false); } }} />
+      </View>
+    </View>
+  );
+}
+
+// Returns a state updater that drops one field's error, for use when that field changes.
+export const dropFieldError = (k) => (e) => (e && e.fields && e.fields[k] ? { ...e, fields: { ...e.fields, [k]: undefined } } : e);
+
 // Turns an API error into a top message plus per-field messages.
 export function errorParts(e) {
   if (!e) return { message: null, fields: {} };
@@ -141,4 +200,5 @@ const styles = StyleSheet.create({
   box: { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, alignItems: "center", justifyContent: "center", marginTop: 1 },
   tabs: { flexDirection: "row", borderRadius: 12, padding: 4 },
   tab: { flex: 1, alignItems: "center", paddingVertical: 10, borderRadius: 9 },
+  chip: { borderWidth: 1.5, borderRadius: 20, paddingVertical: 8, paddingHorizontal: 14, minHeight: 40, justifyContent: "center" },
 });

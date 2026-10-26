@@ -18,7 +18,9 @@ export function createAuth({ db, config, mailer, now = () => Date.now() }) {
     };
     if (u.role === "partner") {
       const p = await t.get(`SELECT status FROM partner_profiles WHERE user_id = $1`, [u.id]);
-      out.partner = { status: p ? p.status : "applicant" };
+      const area = await t.get(`SELECT radius_miles FROM partner_service_areas WHERE user_id = $1`, [u.id]);
+      const svc = await t.get(`SELECT COUNT(*) AS n FROM partner_services WHERE user_id = $1`, [u.id]);
+      out.partner = { status: p ? p.status : "applicant", serviceAreaSet: !!area, servicesCount: Number(svc ? svc.n : 0) };
     }
     return out;
   }

@@ -86,11 +86,27 @@ export function AuthProvider({ api, role, wrongAppMessage, children }) {
     }
   }, [api, save, clear]);
 
+  // Calls a signed-in endpoint: call("vehicles") → api.vehicles(token). If the session ended elsewhere, signs out here too.
+  const call = useCallback(async (method, ...args) => {
+    try {
+      return await api[method](tokenRef.current, ...args);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) await clear();
+      throw e;
+    }
+  }, [api, clear]);
+
+  const updateMe = useCallback(async (fields) => {
+    const { user } = await call("updateMe", fields);
+    await save({ token: tokenRef.current, user });
+    return user;
+  }, [call, save]);
+
   const value = useMemo(() => ({
-    ...state, api, signIn, signUp, signOut, signOutEverywhere, refresh,
+    ...state, api, call, signIn, signUp, signOut, signOutEverywhere, refresh, updateMe,
     requestReset: (email) => api.requestReset(email),
     confirmReset: (input) => api.confirmReset(input),
-  }), [state, api, signIn, signUp, signOut, signOutEverywhere, refresh]);
+  }), [state, api, call, signIn, signUp, signOut, signOutEverywhere, refresh, updateMe]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

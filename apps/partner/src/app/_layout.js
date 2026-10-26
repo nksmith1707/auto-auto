@@ -54,6 +54,8 @@ function Routes() {
           <Stack.Screen name="index" />
           <Stack.Protected guard={signedIn}>
             <Stack.Screen name="home" />
+            <Stack.Screen name="service-area" />
+            <Stack.Screen name="services" />
           </Stack.Protected>
           <Stack.Protected guard={!signedIn}>
             <Stack.Screen name="sign-in" />

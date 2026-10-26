@@ -4,8 +4,10 @@ import { createRouter, send, HttpError } from "./lib/http.js";
 import { createAuth } from "./auth/service.js";
 import { authRoutes } from "./auth/routes.js";
 import { createMailer } from "./lib/mailer.js";
+import { profileRoutes } from "./profiles/routes.js";
+import { createVinDecoder } from "./vehicles/vin.js";
 
-export function createApp({ db, config, mailer = createMailer({ isProd: config.isProd }), log = console }) {
+export function createApp({ db, config, mailer = createMailer({ isProd: config.isProd }), log = console, vinFetch = config.vinLookup ? globalThis.fetch : null }) {
   const router = createRouter();
   const auth = createAuth({ db, config, mailer });
 
@@ -15,11 +17,13 @@ export function createApp({ db, config, mailer = createMailer({ isProd: config.i
     send(res, dbOk ? 200 : 503, { ok: dbOk, service: "auto-auto-api" });
   });
   authRoutes(router, { auth, config });
+  const vinDecode = createVinDecoder({ db, fetchImpl: vinFetch, log: (m) => log.log ? log.log(m) : undefined });
+  profileRoutes(router, { db, auth, vinDecode });
 
   const server = http.createServer(async (req, res) => {
     const origin = req.headers.origin;
     const cors = origin && config.allowedOrigins.includes(origin)
-      ? { "Access-Control-Allow-Origin": origin, "Vary": "Origin", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE", "Access-Control-Max-Age": "600" }
+      ? { "Access-Control-Allow-Origin": origin, "Vary": "Origin", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE", "Access-Control-Max-Age": "600" }
       : {};
     try {
       const url = new URL(req.url, "http://local");

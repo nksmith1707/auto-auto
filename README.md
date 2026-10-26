@@ -53,8 +53,8 @@ EXPO_PUBLIC_API_URL=http://192.168.1.20:3000 npx expo start --clear
 
 | App | Screens so far |
 |---|---|
-| Customer (`apps/customer`) | Splash, Log in / Sign up, Forgot password, Enter reset code, Home with account details, Log out, Log out on all devices |
-| Partner (`apps/partner`) | Splash, Log in, Apply (create partner account), Forgot password, Enter reset code, Application status, Log out, Log out on all devices |
+| Customer (`apps/customer`) | Splash, Log in / Sign up, Forgot password, Enter reset code, Home (vehicles, places, account), Add/edit vehicle with VIN decode, Add/edit saved place, Edit your details, Log out, Log out on all devices |
+| Partner (`apps/partner`) | Splash, Log in, Apply (create partner account), Forgot password, Enter reset code, Application checklist, Service area (home base + travel radius), Services you offer, Log out, Log out on all devices |
 
 Notes:
 - Sessions are kept in the phone's secure storage (Keychain on iPhone, Keystore on Android), so people stay signed in until they log out or their session expires.
@@ -87,6 +87,15 @@ All requests and responses are JSON. Signed-in requests send `Authorization: Bea
 | GET | `/v1/me` | The signed-in account (partners include their application status) |
 | POST | `/v1/auth/password-reset` | Email a reset code. Same answer whether or not the account exists |
 | POST | `/v1/auth/password-reset/confirm` | Body: `token`, `password`. Signs out all devices |
+| PATCH | `/v1/me` | Change `firstName`, `lastName`, `phone` (partners must keep a phone). Email changes go through support |
+| GET | `/v1/catalog/services` | Services partners can offer, by category. `needsProof` marks brake work, glass, DOT, and washing |
+| GET | `/v1/vin/:vin` | Customers. Checks the VIN (length, letters, check digit), reads the model year and maker, and looks up model, trim, engine, and fuel from NHTSA when it can (cached) |
+| GET, POST | `/v1/vehicles` | Customers. List or add vehicles (up to 10). Body: `year`, `make`, `model`, plus optional `trim`, `vin`, `plate`, `plateState`, `color`, `mileage`, `fuel`, `oilPreference`, `nickname`, `insurer`, `policyNumber` |
+| GET, PATCH, DELETE | `/v1/vehicles/:id` | Customers, own vehicles only. Removing archives the vehicle so its history stays |
+| GET, POST | `/v1/places` | Customers. Saved places (up to 10): `label`, `street`, `unit`, `city`, `state`, `zip`, `parking`, `notes`, `isDefault`. The first place is the default |
+| PATCH, DELETE | `/v1/places/:id` | Customers, own places only. Removing the default hands it to the next place |
+| GET, PUT | `/v1/partner/service-area` | Partners. Home base address (private) and travel radius, 5 to 60 miles in steps of 5 |
+| GET, PUT | `/v1/partner/services` | Partners. Body: `serviceIds` from the catalog |
 
 Errors look like `{ "error": { "code": "invalid_input", "message": "...", "fields": { "email": "..." } } }`.
 

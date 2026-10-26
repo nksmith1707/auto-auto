@@ -38,7 +38,7 @@ test("partner signs up as an applicant with a normalized phone", async () => {
   assert.equal(r.status, 201);
   assert.equal(r.body.user.role, "partner");
   assert.equal(r.body.user.phone, "+18655550177");
-  assert.deepEqual(r.body.user.partner, { status: "applicant" });
+  assert.deepEqual(r.body.user.partner, { status: "applicant", serviceAreaSet: false, servicesCount: 0 });
 });
 
 test("partners must give a mobile number; nobody can sign up as admin", async () => {
