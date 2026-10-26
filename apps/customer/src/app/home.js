@@ -1,6 +1,6 @@
 // Signed-in home: vehicles, saved places, and account. Booking comes in later steps.
 import { useCallback, useState } from "react";
-import { RefreshControl, StyleSheet, Text, View } from "react-native";
+import { Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { GradientFill } from "../../../shared/Fill";
 import { formatPhone } from "../../../shared/api";
@@ -109,6 +109,11 @@ export default function Home() {
                   <View key={x} style={styles.pill}><Text style={{ fontFamily: t.f.bodyB, fontSize: 12, color: "#fff" }}>{x}</Text></View>
                 ))}
             </View>
+            <Pressable onPress={() => router.push({ pathname: "/prices", params: { vehicleId: v.id } })} accessibilityRole="button"
+              accessibilityLabel={`See prices for the ${v.year} ${v.make} ${v.model}`} testID="see-prices"
+              style={({ pressed }) => [styles.pricesBtn, pressed && { opacity: 0.85 }]}>
+              <Text style={{ fontFamily: t.f.displayX, fontSize: 15, color: "#0A2A7A", letterSpacing: 0.3 }}>See prices for this vehicle ›</Text>
+            </Pressable>
           </Card>
         ))}
       </View>
@@ -172,4 +177,5 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingVertical: 13 },
   pill: { backgroundColor: "rgba(255,255,255,0.16)", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
   tag: { borderRadius: 20, paddingHorizontal: 9, paddingVertical: 3 },
+  pricesBtn: { marginTop: 4, backgroundColor: "#fff", borderRadius: 12, paddingVertical: 11, alignItems: "center" },
 });

@@ -62,6 +62,7 @@ function Routes() {
             <Stack.Screen name="vehicle" />
             <Stack.Screen name="place" />
             <Stack.Screen name="profile" />
+            <Stack.Screen name="prices" />
           </Stack.Protected>
           <Stack.Protected guard={!signedIn}>
             <Stack.Screen name="sign-in" />

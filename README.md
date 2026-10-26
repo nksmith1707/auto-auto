@@ -53,8 +53,8 @@ EXPO_PUBLIC_API_URL=http://192.168.1.20:3000 npx expo start --clear
 
 | App | Screens so far |
 |---|---|
-| Customer (`apps/customer`) | Splash, Log in / Sign up, Forgot password, Enter reset code, Home (vehicles, places, account), Add/edit vehicle with VIN decode, Add/edit saved place, Edit your details, Log out, Log out on all devices |
-| Partner (`apps/partner`) | Splash, Log in, Apply (create partner account), Forgot password, Enter reset code, Application checklist, Service area (home base + travel radius), Services you offer, Log out, Log out on all devices |
+| Customer (`apps/customer`) | Splash, Log in / Sign up, Forgot password, Enter reset code, Home (vehicles, places, account), Add/edit vehicle with VIN decode, Prices for each vehicle with a visit estimate, Add/edit saved place, Edit your details, Log out, Log out on all devices |
+| Partner (`apps/partner`) | Splash, Log in, Apply (create partner account), Forgot password, Enter reset code, Application checklist, Service area (home base + travel radius), Services you offer (with pay per job), Log out, Log out on all devices |
 
 Notes:
 - Sessions are kept in the phone's secure storage (Keychain on iPhone, Keystore on Android), so people stay signed in until they log out or their session expires.
@@ -96,6 +96,14 @@ All requests and responses are JSON. Signed-in requests send `Authorization: Bea
 | PATCH, DELETE | `/v1/places/:id` | Customers, own places only. Removing the default hands it to the next place |
 | GET, PUT | `/v1/partner/service-area` | Partners. Home base address (private) and travel radius, 5 to 60 miles in steps of 5 |
 | GET, PUT | `/v1/partner/services` | Partners. Body: `serviceIds` from the catalog |
+| GET | `/v1/pricing/settings` | The live Pricing & rules version: every number RULES.md marks *setting*, with labels and limits |
+| GET | `/v1/pricing/settings/history` | Admins. Every version with its note and what changed |
+| POST | `/v1/pricing/settings` | Admins. Publish a new version. Body: `changes` (e.g. `{ "labor": 110 }`), `note` (required), `expectedVersion` |
+| GET | `/v1/pricing/menu` | Every service priced for a vehicle (`vehicleId` for customers, `make`/`model` for partners). Partners also see what they'd earn |
+| POST | `/v1/quotes` | A visit: `serviceIds` plus the vehicle. Returns lines, fees, total, deposit, card hold, and (partners/admins) partner pay |
+| POST | `/v1/quotes/glass` | Partners. Glass replacement price from `glassCost`, `serviceId`, `needsCalibration` |
+
+Money in every response is in whole cents (`priceCents: 8000` is $80.00). Each quote says which settings version it used.
 
 Errors look like `{ "error": { "code": "invalid_input", "message": "...", "fields": { "email": "..." } } }`.
 

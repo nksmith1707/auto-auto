@@ -19,10 +19,11 @@ export const SERVICES = [
   { id: "air_filters", category: "maintenance", name: "Air filters" },
   { id: "brakes", category: "maintenance", name: "Brakes", needsProof: true },
   { id: "battery_test", category: "maintenance", name: "Battery test" },
-  { id: "diagnostics", category: "maintenance", name: "Diagnostics" },
+  { id: "diagnostics", category: "maintenance", name: "Diagnose It visit" },
   { id: "ac_service", category: "maintenance", name: "A/C service" },
 
-  { id: "quick_bulbs", category: "quick_fixes", name: "Bulbs (headlight, brake, tail)" },
+  { id: "quick_headlight_bulb", category: "quick_fixes", name: "Headlight bulb" },
+  { id: "quick_tail_bulb", category: "quick_fixes", name: "Brake or tail light bulb" },
   { id: "quick_wipers", category: "quick_fixes", name: "Wiper blades" },
   { id: "quick_fluids", category: "quick_fixes", name: "Fluid check & top-off" },
   { id: "quick_cabin_filter", category: "quick_fixes", name: "Cabin filter" },
@@ -49,6 +50,7 @@ export const SERVICES = [
   { id: "glass_chip", category: "glass", name: "Windshield chip repair", needsProof: true },
   { id: "glass_windshield", category: "glass", name: "Windshield replacement", needsProof: true },
   { id: "glass_side", category: "glass", name: "Side or door glass", needsProof: true },
+  { id: "glass_back", category: "glass", name: "Back glass replacement", needsProof: true },
   { id: "glass_adas", category: "glass", name: "ADAS camera calibration", needsProof: true },
 
   { id: "dot_annual", category: "fleet", name: "DOT annual inspection", needsProof: true },

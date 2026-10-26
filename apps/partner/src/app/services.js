@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { money } from "../../../shared/api";
 import { useAuth } from "../../../shared/session";
 import { Button, Notice, Screen, T } from "../../../shared/ui";
 import { HeroFade } from "../components/Backdrops";
@@ -26,11 +27,16 @@ export default function Services() {
   const [err, setErr] = useState(null);
   const back = () => (router.canGoBack() ? router.back() : router.replace("/home"));
 
+  const [pay, setPay] = useState({});
   useEffect(() => {
     call("partnerServices").then(({ services, catalog: c }) => {
       setCatalog(c);
       setChosen(new Set(services.map((s) => s.id)));
     }).catch((e) => setErr(e.message));
+    // What each job pays on a typical car, from the pricing engine. Not essential, so errors are ignored.
+    call("priceMenu", { make: "Honda", model: "Civic", year: 2015 })
+      .then((m) => setPay(Object.fromEntries(m.items.map((i) => [i.serviceId, i]))))
+      .catch(() => {});
   }, [call]);
 
   const groups = useMemo(() => (catalog ? catalog.categories.map((c) => ({ ...c, items: catalog.services.filter((s) => s.category === c.id) })) : []), [catalog]);
@@ -59,6 +65,7 @@ export default function Services() {
           <View style={{ gap: 8 }}>
             <T v="h1" accessibilityRole="header">What do you offer?</T>
             <T v="muted">Turn on the work you're set up to do. You'll only get requests for these. Auto-Auto sets fair, guaranteed prices from standard book times, so you never have to quote.</T>
+            <T v="hint">Pay shown is for an at-home job on a 2015 Honda Civic: labor after the platform fee, plus the mobile fee, at least the visit minimum. Trucks and bigger engines take longer and pay more. Parts are reimbursed at cost on top.</T>
           </View>
           {groups.map((g) => (
             <View key={g.id} style={{ backgroundColor: p.panel, borderWidth: 1, borderColor: p.line, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 6 }}>
@@ -70,6 +77,16 @@ export default function Services() {
                     style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, borderTopWidth: i ? 1 : 0, borderTopColor: p.line }}>
                     <View style={{ flex: 1, gap: 2 }}>
                       <Text style={{ fontFamily: fonts.bodyB, fontSize: 15, color: p.ink }}>{s.name}</Text>
+                      {pay[s.id] && pay[s.id].partnerEarnsCents != null ? (
+                        <Text style={{ fontFamily: fonts.body, fontSize: 12, color: p.muted }}>
+                          You earn <Text style={{ fontFamily: fonts.bodyX, color: p.money }}>{money(pay[s.id].partnerEarnsCents)}</Text> · customer pays {money(pay[s.id].priceCents)}
+                          {pay[s.id].partsCostCents ? ` · parts ${money(pay[s.id].partsCostCents)} reimbursed` : ""}
+                        </Text>
+                      ) : pay[s.id] && pay[s.id].quoted ? (
+                        <Text style={{ fontFamily: fonts.body, fontSize: 12, color: p.muted }}>You quote it from the glass cost</Text>
+                      ) : pay[s.id] && pay[s.id].fleetOnly ? (
+                        <Text style={{ fontFamily: fonts.body, fontSize: 12, color: p.muted }}>Priced per fleet vehicle</Text>
+                      ) : null}
                       {s.needsProof ? <Text style={{ fontFamily: fonts.bodyB, fontSize: 11, color: p.money }}>Needs proof on file</Text> : null}
                     </View>
                     <Toggle on={on} />

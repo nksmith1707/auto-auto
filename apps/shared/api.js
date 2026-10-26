@@ -76,6 +76,10 @@ export function createApi({ baseUrl = DEFAULT_API_URL, fetchImpl = globalThis.fe
     updatePlace: (token, id, p) => request("PATCH", `/v1/places/${encodeURIComponent(id)}`, { token, body: p }),
     removePlace: (token, id) => request("DELETE", `/v1/places/${encodeURIComponent(id)}`, { token }),
 
+    pricingSettings: (token) => request("GET", "/v1/pricing/settings", { token }),
+    priceMenu: (token, q) => request("GET", `/v1/pricing/menu?${new URLSearchParams(Object.entries(q || {}).filter(([, v]) => v != null && v !== "")).toString()}`, { token }),
+    quote: (token, body) => request("POST", "/v1/quotes", { token, body }),
+
     serviceArea: (token) => request("GET", "/v1/partner/service-area", { token }),
     saveServiceArea: (token, a) => request("PUT", "/v1/partner/service-area", { token, body: a }),
     partnerServices: (token) => request("GET", "/v1/partner/services", { token }),
@@ -98,4 +102,13 @@ export function passwordHint(password, email = "") {
 export function formatPhone(e164) {
   const d = String(e164 || "").replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
   return d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : e164 || "";
+}
+
+// $12.5 → "$12.50", 1250 cents → "$12.50". Whole dollars drop the cents: "$80".
+export function money(cents, { always = false } = {}) {
+  if (cents == null) return "";
+  const neg = cents < 0;
+  const v = Math.abs(cents) / 100;
+  const s = !always && Number.isInteger(v) ? v.toLocaleString("en-US") : v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${neg ? "−" : ""}$${s}`;
 }

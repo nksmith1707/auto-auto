@@ -6,6 +6,8 @@ import { authRoutes } from "./auth/routes.js";
 import { createMailer } from "./lib/mailer.js";
 import { profileRoutes } from "./profiles/routes.js";
 import { createVinDecoder } from "./vehicles/vin.js";
+import { pricingRoutes } from "./pricing/routes.js";
+import { createSettingsStore } from "./pricing/settings.js";
 
 export function createApp({ db, config, mailer = createMailer({ isProd: config.isProd }), log = console, vinFetch = config.vinLookup ? globalThis.fetch : null }) {
   const router = createRouter();
@@ -19,6 +21,8 @@ export function createApp({ db, config, mailer = createMailer({ isProd: config.i
   authRoutes(router, { auth, config });
   const vinDecode = createVinDecoder({ db, fetchImpl: vinFetch, log: (m) => log.log ? log.log(m) : undefined });
   profileRoutes(router, { db, auth, vinDecode });
+  const settings = createSettingsStore({ db });
+  pricingRoutes(router, { db, auth, settings });
 
   const server = http.createServer(async (req, res) => {
     const origin = req.headers.origin;
@@ -49,5 +53,5 @@ export function createApp({ db, config, mailer = createMailer({ isProd: config.i
   });
   server.requestTimeout = 15_000;
   server.headersTimeout = 10_000;
-  return { server, auth, mailer };
+  return { server, auth, mailer, settings };
 }

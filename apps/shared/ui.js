@@ -86,12 +86,15 @@ export function LinkButton({ title, onPress, style, textStyle }) {
   );
 }
 
+// Words (or words mixed with numbers) must sit inside <Text> on phones, or the screen crashes.
+const isPlainText = (c) => typeof c === "string" || typeof c === "number" || (Array.isArray(c) && c.every((x) => x == null || typeof x === "string" || typeof x === "number"));
+
 export function Notice({ children, tone = "info", style }) {
   const t = useTheme();
   const tones = { info: t.notice.info, bad: t.notice.bad, ok: t.notice.ok };
   return (
     <View style={[t.notice.box, tones[tone], style]} accessibilityLiveRegion="polite">
-      {typeof children === "string" ? <Text style={[t.text.small, tone === "bad" && { color: t.c.bad }, tone === "ok" && { color: t.c.okText }]}>{children}</Text> : children}
+      {isPlainText(children) ? <Text style={[t.text.small, tone === "bad" && { color: t.c.bad }, tone === "ok" && { color: t.c.okText }]}>{children}</Text> : children}
     </View>
   );
 }
