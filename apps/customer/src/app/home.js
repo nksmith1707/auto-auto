@@ -2,7 +2,7 @@
 import { useCallback, useState } from "react";
 import { RefreshControl, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
+import { GradientFill } from "../../../shared/Fill";
 import { formatPhone } from "../../../shared/api";
 import { EngineLogo } from "../../../shared/Logo";
 import { useAuth } from "../../../shared/session";
@@ -11,18 +11,9 @@ import { Button, Card, LinkButton, Notice, Screen, T, useTheme } from "../../../
 const FUEL = { gas: "Gas", diesel: "Diesel", hybrid: "Hybrid", electric: "Electric" };
 const PARK = { driveway: "Driveway", street: "Street parking", lot: "Parking lot", garage: "Garage", other: "Other" };
 
-function Gradient({ id, from, to }) {
-  return (
-    <Svg style={StyleSheet.absoluteFill} width="100%" height="100%" preserveAspectRatio="none">
-      <Defs>
-        <LinearGradient id={id} x1="0" y1="0" x2="1" y2="1">
-          <Stop offset="0" stopColor={from} />
-          <Stop offset="1" stopColor={to} />
-        </LinearGradient>
-      </Defs>
-      <Rect width="100%" height="100%" fill={`url(#${id})`} />
-    </Svg>
-  );
+// Diagonal brand fade, same as the prototype's vehicle card.
+function Gradient({ from, to }) {
+  return <GradientFill stops={[[0, from], [1, to]]} x1={0} y1={0} x2={1} y2={1} />;
 }
 
 function SectionHead({ title, action, onAction, testID }) {
@@ -78,7 +69,7 @@ export default function Home() {
       </View>
 
       <View style={styles.hero} accessible accessibilityLabel={`Hi ${user.firstName}.`}>
-        <Gradient id="hero" from={t.p.brandDeep} to={t.p.brand} />
+        <Gradient from={t.p.brandDeep} to={t.p.brand} />
         <View style={{ flex: 1, gap: 4 }}>
           <Text style={{ fontFamily: t.f.displayX, fontSize: 26, color: "#fff" }}>Hi, {user.firstName}</Text>
           <Text style={{ fontFamily: t.f.body, fontSize: 14, color: "#DCE6FF", lineHeight: 20 }}>
@@ -103,8 +94,8 @@ export default function Home() {
         ) : null}
         {(vehicles || []).map((v) => (
           <Card key={v.id} onPress={() => router.push({ pathname: "/vehicle", params: { id: v.id } })} accessibilityLabel={`Edit ${v.year} ${v.make} ${v.model}`}
-            style={{ overflow: "hidden", borderWidth: 0, padding: 16, gap: 8 }} testID="vehicle-card">
-            <Gradient id={`v${v.id}`} from={t.p.brandDeep} to={t.p.brand} />
+            style={{ overflow: "hidden", borderWidth: 0, padding: 16, gap: 8, backgroundColor: t.p.brand }} testID="vehicle-card">
+            <Gradient from={t.p.brandDeep} to={t.p.brand} />
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontFamily: t.f.displayX, fontSize: 20, color: "#fff" }}>{v.year} {v.make} {v.model}</Text>
@@ -176,7 +167,7 @@ export default function Home() {
 }
 
 const styles = StyleSheet.create({
-  hero: { borderRadius: 20, overflow: "hidden", padding: 16, flexDirection: "row", alignItems: "center", gap: 12 },
+  hero: { borderRadius: 20, overflow: "hidden", padding: 16, flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#1550E6" },
   card: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 14 },
   row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingVertical: 13 },
   pill: { backgroundColor: "rgba(255,255,255,0.16)", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { AccessibilityInfo, Animated, Easing, StyleSheet, Text, View } from "react-native";
-import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
+import { GradientFill } from "../../../shared/Fill";
 import { EngineLogo } from "../../../shared/Logo";
 import { useTheme } from "../../../shared/ui";
 
@@ -15,16 +15,8 @@ export function Splash() {
   }, [w]);
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.wrap]} accessibilityLabel="Auto Auto. Keep Moving Forward. Loading.">
-      <Svg style={StyleSheet.absoluteFill} width="100%" height="100%" preserveAspectRatio="none">
-        <Defs>
-          <LinearGradient id="g" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={t.p.sky} />
-            <Stop offset="1" stopColor={t.p.brandSoft} />
-          </LinearGradient>
-        </Defs>
-        <Rect width="100%" height="100%" fill="url(#g)" />
-      </Svg>
+    <View style={[StyleSheet.absoluteFill, styles.wrap, { backgroundColor: t.p.sky }]} accessibilityLabel="Auto Auto. Keep Moving Forward. Loading.">
+      <GradientFill stops={[[0, t.p.sky], [1, t.p.brandSoft]]} />
       <Text style={[styles.wordmark, { color: t.c.logo, fontFamily: t.f.displayX }]}>Auto Auto</Text>
       {/* Wrapped so it draws above the gradient on web too. */}
       <View><EngineLogo size={130} color={t.c.logo} hole={t.dark ? t.p.sky : "#fff"} /></View>
