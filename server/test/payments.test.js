@@ -229,3 +229,16 @@ test("without Stripe nothing is charged, but partner earnings are still recorded
     assert.equal(setup.status, 503);
   } finally { await off.close(); }
 });
+
+test("when Stripe refuses (like Connect not turned on), the app gets Stripe's reason in test mode", async () => {
+  const fs = createFakeStripe();
+  const off = await startTestApp({ STRIPE_SECRET_KEY: "sk_test_fake" }, { stripeFetch: async (url, opts) => (url.endsWith("/v1/accounts")
+    ? { status: 400, json: async () => ({ error: { type: "invalid_request_error", message: "You can only create new accounts if you've signed up for Connect." } }) }
+    : fs.fetch(url, opts)) });
+  try {
+    const p = await off.call("POST", "/v1/auth/signup", { body: partner({ email: "noconnect@example.com" }) });
+    const r = await off.call("POST", "/v1/payouts/account", { token: p.body.token, body: { returnUrl: "exp://x/--/payouts" } });
+    assert.equal(r.status, 502);
+    assert.match(r.body.error.message, /signed up for Connect/);
+  } finally { await off.close(); }
+});

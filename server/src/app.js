@@ -11,7 +11,7 @@ import { createSettingsStore } from "./pricing/settings.js";
 import { createJobs } from "./jobs/service.js";
 import { jobRoutes } from "./jobs/routes.js";
 import { createGeocoder } from "./maps/geo.js";
-import { createStripe } from "./payments/stripe.js";
+import { createStripe, StripeError } from "./payments/stripe.js";
 import { createPayments } from "./payments/service.js";
 import { paymentRoutes } from "./payments/routes.js";
 import { createOnboarding } from "./onboarding/service.js";
@@ -61,6 +61,11 @@ export function createApp({ db, config, mailer = createMailer({ isProd: config.i
       if (e instanceof HttpError) {
         const headers = e.extra.retryAfter ? { "Retry-After": String(e.extra.retryAfter), ...cors } : cors;
         if (!res.headersSent) send(res, e.status, { error: { code: e.code, message: e.message, ...e.extra } }, headers);
+      } else if (e instanceof StripeError) {
+        // Stripe said no (often a setting in the Stripe dashboard). In test mode, show Stripe's own words to help fix it.
+        log.error("[stripe]", req.method, req.url, e.status, e.code || "", e.message);
+        const test = String(config.stripeSecretKey || "").startsWith("sk_test_");
+        if (!res.headersSent) send(res, 502, { error: { code: "stripe_error", message: `Stripe couldn't do that right now. Try again in a few minutes.${test ? ` (Stripe says: ${e.message})` : ""}` } }, cors);
       } else {
         log.error("[error]", req.method, req.url, e);
         if (!res.headersSent) send(res, 500, { error: { code: "server_error", message: "Something went wrong on our side. Try again." } }, cors);
