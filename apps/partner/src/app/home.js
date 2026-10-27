@@ -8,9 +8,10 @@ import { fmtLeft, fmtWindow } from "../../../shared/format";
 import { useAuth } from "../../../shared/session";
 import { Button, LinkButton, Notice } from "../../../shared/ui";
 import { fonts, p } from "../theme";
+import { stepRoute } from "../components/steps";
 
 const STATUS = {
-  applicant: { label: "Application started", tone: "money", text: "Set your service area and the services you offer now. Business and tax details, ID, background check, proof of certifications, payouts, and agreements open in upcoming updates." },
+  applicant: { label: "Application started", tone: "money", text: "Finish each step below, then submit. Plan for about 25 minutes. You can stop and come back anytime." },
   in_review: { label: "In review", tone: "brand", text: "We're reviewing your application. We'll let you know as soon as there's a decision." },
   active: { label: "Approved", tone: "ok", text: "You're approved. Jobs near you will show up here." },
   paused: { label: "Paused", tone: "bad", text: "Your account is paused, so you won't get new jobs. Contact partner support to get back on the road." },
@@ -19,7 +20,6 @@ const STATUS = {
 const CHIP = {
   money: { bg: p.moneySoft, fg: p.money }, brand: { bg: p.brandSoft, fg: p.brandText }, ok: { bg: p.okSoft, fg: p.ok }, bad: { bg: p.badSoft, fg: p.bad },
 };
-const LATER = ["Business & tax (W-9)", "Identity & driving", "Background check", "Certifications & insurance", "Payouts", "Agreements", "Review & submit"];
 
 function Step({ n, title, sub, done, onPress, testID }) {
   const body = (
@@ -94,7 +94,9 @@ export default function Home() {
     finally { setOfferBusy(null); loadOffers(); loadJobs(); }
   }
   // Pick up changes made on other screens.
-  useFocusEffect(useCallback(() => { refresh().catch(() => {}); loadJobs(); }, [refresh, loadJobs]));
+  const [application, setApplication] = useState(null);
+  const loadApplication = useCallback(async () => { try { setApplication(await call("onboarding")); } catch { /* checklist waits for the next refresh */ } }, [call]);
+  useFocusEffect(useCallback(() => { refresh().catch(() => {}); loadJobs(); loadApplication(); }, [refresh, loadJobs, loadApplication]));
   const [confirmAll, setConfirmAll] = useState(false);
   const [busy, setBusy] = useState(null);
   const [err, setErr] = useState(null);
@@ -113,7 +115,7 @@ export default function Home() {
   }
   async function pull() {
     setRefreshing(true);
-    try { await refresh(); await loadJobs(); setErr(null); } catch (e) { setErr(e.message); } finally { setRefreshing(false); }
+    try { await refresh(); await loadJobs(); await loadApplication(); setErr(null); } catch (e) { setErr(e.message); } finally { setRefreshing(false); }
   }
 
   return (
@@ -152,6 +154,7 @@ export default function Home() {
 
           {active ? (
             <View style={{ gap: 14, marginBottom: 14 }}>
+              {jobs.blocked ? <Notice tone="bad">{jobs.blocked}</Notice> : null}
               <JobList title="Your jobs" empty="No jobs yet. Accept one below." jobs={(jobs.mine || []).filter((j) => !["completed", "cancelled", "expired"].includes(j.status))} onOpen={(id) => router.push({ pathname: "/job", params: { id } })} />
               <JobList title="Open jobs" empty={jobs.board ? "No open jobs for your services right now. Pull down to refresh." : "Loading…"} jobs={jobs.board || []} onOpen={(id) => router.push({ pathname: "/job", params: { id } })} board />
               {(jobs.mine || []).some((j) => j.status === "completed") ? (
@@ -161,6 +164,7 @@ export default function Home() {
                 <Step n={1} title="Service area" sub={user.partner.serviceAreaSet ? "Set" : "Where you'll travel for jobs"} done={!!user.partner.serviceAreaSet} onPress={() => router.push("/service-area")} />
                 <Step n={2} title="Services you offer" sub={`${user.partner.servicesCount} turned on`} done={!!user.partner.servicesCount} onPress={() => router.push("/services")} />
                 <Step n={3} title="Payouts" sub="Balance, cash out, and where we send your money" done={!!user.partner.payoutsEnabled} onPress={() => router.push("/payouts")} testID="step-payouts" />
+                <Step n={4} title="Insurance & documents" sub="Renew certificates before they expire" done={false} onPress={() => router.push("/onboarding/insurance")} testID="step-insurance-active" />
               </View>
             </View>
           ) : null}
@@ -170,16 +174,23 @@ export default function Home() {
             <Text style={styles.label}>Your application</Text>
             <Text style={{ fontFamily: fonts.displayX, fontSize: 22, color: p.ink }} accessibilityRole="header">{st.label}</Text>
             <Text style={{ fontFamily: fonts.body, fontSize: 14, lineHeight: 20, color: p.muted }}>{st.text}</Text>
+            {applying && application && application.decision === "return" && application.decisionNote ? (
+              <Notice tone="bad" style={{ marginTop: 6 }}>{`We sent your application back: ${application.decisionNote}`}</Notice>
+            ) : null}
             {applying ? (
-              <View style={{ gap: 10, marginTop: 6 }}>
+              <View style={{ gap: 10, marginTop: 6 }} testID="checklist">
                 <Step n={1} title="Account" done />
-                <Step n={2} title="Service area" sub={user.partner && user.partner.serviceAreaSet ? "Set" : "Where you'll travel for jobs"} done={!!(user.partner && user.partner.serviceAreaSet)} onPress={() => router.push("/service-area")} testID="step-area" />
-                <Step n={3} title="Services you offer" sub={user.partner && user.partner.servicesCount ? `${user.partner.servicesCount} turned on` : "Pick the work you do"} done={!!(user.partner && user.partner.servicesCount)} onPress={() => router.push("/services")} testID="step-services" />
-                {LATER.map((s, i) => <Step key={s} n={i + 4} title={s} />)}
-                <Notice style={{ marginTop: 4, backgroundColor: p.panel2 }}>
-                  <Text style={{ fontFamily: fonts.body, fontSize: 13, lineHeight: 19, color: p.ink }}>Steps 4 to 10 open in upcoming updates. You'll finish everything here in the app; nothing else is needed from you yet.</Text>
-                </Notice>
+                {application ? application.steps.map((x, i) => (
+                  <Step key={x.id} n={i + 2} title={x.title} sub={x.done ? (x.id === "services" ? `${user.partner.servicesCount} turned on` : x.id === "area" ? "Set" : null) : x.errors[0]} done={x.done} onPress={() => router.push(stepRoute(x.id))} testID={`step-${x.id}`} />
+                )) : <Text style={{ fontFamily: fonts.body, fontSize: 13, color: p.muted }}>Loading your checklist…</Text>}
+                {application ? (
+                  <Step n={application.steps.length + 2} title="Review & submit" sub={application.ready ? "Ready to submit" : `${application.steps.filter((x) => x.done).length} of ${application.steps.length} steps done`}
+                    done={false} onPress={() => router.push("/onboarding/review")} testID="step-review" />
+                ) : null}
               </View>
+            ) : null}
+            {user.partner && user.partner.status === "in_review" ? (
+              <Pressable onPress={() => router.push("/onboarding/review")} accessibilityRole="button"><Text style={{ fontFamily: fonts.bodyX, fontSize: 14, color: p.brandText, marginTop: 4 }}>View your application ›</Text></Pressable>
             ) : null}
           </View>
           ) : null}

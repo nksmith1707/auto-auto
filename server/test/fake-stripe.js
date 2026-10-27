@@ -18,7 +18,7 @@ function parseForm(body) {
 export function createFakeStripe({ checkoutBase = "https://checkout.stripe.test" } = {}) {
   let n = 0;
   const id = (p) => `${p}_${++n}`;
-  const st = { customers: {}, sessions: {}, pms: {}, intents: {}, refunds: [], accounts: {}, transfers: [], idem: {}, calls: [], failTransfers: false };
+  const st = { identity: {}, customers: {}, sessions: {}, pms: {}, intents: {}, refunds: [], accounts: {}, transfers: [], idem: {}, calls: [], failTransfers: false };
   const err = (status, type, code, message, decline) => ({ status, body: { error: { type, code, message, decline_code: decline } } });
 
   function handle(method, path, params, idemKey) {
@@ -108,6 +108,20 @@ export function createFakeStripe({ checkoutBase = "https://checkout.stripe.test"
       st.transfers.push(t);
       return { status: 200, body: t };
     }
+    if (method === "POST" && path === "/v1/identity/verification_sessions") {
+      if (p.type !== "document" || !p.return_url) return err(400, "invalid_request_error", "parameter_missing", "type and return_url are required");
+      const v = { id: id("vs"), status: "requires_input", return_url: p.return_url, options: p.options, metadata: p.metadata, last_error: null, verified_outputs: null };
+      v.url = `${checkoutBase}/identity/${v.id}`;
+      st.identity[v.id] = v;
+      return { status: 200, body: v };
+    }
+    if (method === "GET" && (m = path.match(/^\/v1\/identity\/verification_sessions\/([^/]+)$/))) {
+      const v = st.identity[m[1]];
+      if (!v) return err(404, "invalid_request_error", "resource_missing", "No such verification session");
+      const out = { ...v };
+      if (!(p.expand && Object.values(p.expand).includes("verified_outputs"))) delete out.verified_outputs;
+      return { status: 200, body: out };
+    }
     return err(404, "invalid_request_error", "unknown", `Unrecognized request URL (${method}: ${path})`);
   }
 
@@ -123,6 +137,13 @@ export function createFakeStripe({ checkoutBase = "https://checkout.stripe.test"
       const s = st.sessions[sessionId];
       this.addCard(s.customer, card);
       return s.success_url;
+    },
+    // What happens when a partner finishes Stripe's ID check page.
+    finishIdentity(sessionId, { dob = { day: 4, month: 7, year: 1990 }, fail = false } = {}) {
+      const v = st.identity[sessionId];
+      if (fail) Object.assign(v, { status: "requires_input", last_error: { code: "document_expired", reason: "The document is expired." } });
+      else Object.assign(v, { status: "verified", last_error: null, verified_outputs: { dob, first_name: "Test", last_name: "Partner" } });
+      return v.return_url;
     },
     finishOnboarding(accountId) { Object.assign(st.accounts[accountId], { payouts_enabled: true, details_submitted: true }); },
     handle,

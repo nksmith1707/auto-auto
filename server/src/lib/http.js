@@ -39,7 +39,7 @@ export function createRouter() {
 
 const MAX_BODY = 64 * 1024;
 
-export function readJson(req) {
+export function readJson(req, { max = MAX_BODY } = {}) {
   return new Promise((resolve, reject) => {
     const type = req.headers["content-type"] || "";
     if (!type.includes("application/json")) return reject(new HttpError(415, "unsupported_media_type", "Send JSON with Content-Type: application/json."));
@@ -47,7 +47,7 @@ export function readJson(req) {
     const chunks = [];
     req.on("data", (c) => {
       size += c.length;
-      if (size > MAX_BODY) {
+      if (size > max) {
         reject(new HttpError(413, "body_too_large", "Request body is too large."));
         req.destroy();
       } else chunks.push(c);

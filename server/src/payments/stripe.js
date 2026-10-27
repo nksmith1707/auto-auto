@@ -78,5 +78,8 @@ export function createStripe({ secretKey, fetchImpl = globalThis.fetch, baseUrl 
     accountLink: (p) => req("POST", "/v1/account_links", { type: "account_onboarding", ...p }),
     loginLink: (id) => req("POST", `/v1/accounts/${encodeURIComponent(id)}/login_links`, {}),
     transfer: (p, idempotencyKey) => req("POST", "/v1/transfers", { currency: "usd", ...p }, { idempotencyKey }),
+    // Partner ID checks (Stripe Identity): license photo plus a matching selfie, on Stripe's page.
+    createIdentitySession: (p) => req("POST", "/v1/identity/verification_sessions", p),
+    getIdentitySession: (id) => req("GET", `/v1/identity/verification_sessions/${encodeURIComponent(id)}`, null, { query: { expand: ["verified_outputs"] } }),
   };
 }

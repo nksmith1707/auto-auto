@@ -54,7 +54,7 @@ EXPO_PUBLIC_API_URL=http://192.168.1.20:3000 npx expo start --clear
 | App | Screens so far |
 |---|---|
 | Customer (`apps/customer`) | Splash, Log in / Sign up, Forgot password, Enter reset code, Home (vehicles, places, account), Add/edit vehicle with VIN decode, Prices for each vehicle with a visit estimate, Book a visit (ASAP or a 2-hour window), Your visits, Visit details (approve partner, approve add-ons and glass quotes, reschedule, cancel with fee preview, receipt, inspection report, warranty), Add/edit saved place, Payment cards (add on Stripe's page, choose default, remove), payment status on each visit with Pay now if a card is declined, Edit your details, Log out, Log out on all devices |
-| Partner (`apps/partner`) | Splash, Log in, Apply (create partner account), Forgot password, Enter reset code, Application checklist, Service area (home base + travel radius), Services you offer (with pay per job), Open jobs and Your jobs (approved partners), Job screen (accept, start trip, arrive, check in, add-ons, glass quote, inspection, complete, no-show, cancel), Payouts (Stripe setup, balance, activity, instant cash-out), Log out, Log out on all devices |
+| Partner (`apps/partner`) | Splash, Log in, Apply (create partner account), Forgot password, Enter reset code, Application checklist (10 steps: service area, services, business & tax, ID check with Stripe, background check disclosure and authorization, insurance with certificate uploads, experience & certifications, safety standards, payouts, agreements with e-signatures; then review & submit), Service area (home base + travel radius), Services you offer (with pay per job), Open jobs and Your jobs (approved partners), Job screen (accept, start trip, arrive, check in, add-ons, glass quote, inspection, complete, no-show, cancel), Payouts (Stripe setup, balance, activity, instant cash-out), Log out, Log out on all devices |
 
 Notes:
 - Sessions are kept in the phone's secure storage (Keychain on iPhone, Keystore on Android), so people stay signed in until they log out or their session expires.
@@ -85,6 +85,18 @@ Set `STRIPE_SECRET_KEY` on the server (Render → the API service → Environmen
 - **Payouts:** partners set up a Stripe Express account from the app. Weekly (Mondays 9 PM Eastern) until 10 completed jobs, then daily at 9 PM. New partners have 5% held in reserve until daily payouts unlock. Instant cash-out costs $0.85.
 - **Test mode:** use card 4242 4242 4242 4242 with any future date, any CVC, any ZIP. Payouts in test mode need test money in the platform balance first: charge test card 4000 0000 0000 0077 once (its funds are available right away).
 - Not yet: parts cards (Stripe Issuing needs approval from Stripe), webhooks (the app checks status when people return from Stripe's pages).
+
+## Partner applications (onboarding)
+
+Partners finish 10 steps in the app, then submit. Each step shows what's still needed.
+
+- **Never stored by Auto-Auto:** SSN/EIN and bank numbers (entered on Stripe's payout page), driver's license numbers, ID photos, and birth dates (Stripe Identity checks the license and a selfie; we keep only "verified" and "21 or older").
+- **Stored:** answers, insurance certificates and licenses (PDF or photo, up to 6 MB, private to the partner and staff), and every signature with the typed name, time, IP address, document version, and a SHA-256 fingerprint of the exact text.
+- **Background check:** the FCRA disclosure is shown on its own, then the partner signs the authorization. No vendor is chosen yet, so staff record the result.
+- **Staff review** (until the Ops Console): `npm run partner-review -- partner@email.com` shows the checklist; add `approve` to approve the documents, record the background check as clear, and approve the partner. `return "what to fix"` sends it back; `deny "reason"` deactivates. Approval is refused until every step is done, the ID is verified as 21+, the background check is clear, and every document is reviewed.
+- Stripe Identity must be turned on in the Stripe dashboard (Identity → Get started). In test mode, Stripe's ID page has buttons to pass or fail without a real license.
+- Active partners can't take jobs while required insurance is expired; renewing it in the app turns jobs back on.
+- Agreement text lives in `server/src/onboarding/documents.js`. Changing any text means raising its version number; partners then sign the new version.
 
 ## Deploy on Render
 
@@ -127,6 +139,23 @@ All requests and responses are JSON. Signed-in requests send `Authorization: Bea
 | POST | `/v1/payments/cards/:id/default` | Customers. Use this card for payments (retries anything that was declined) |
 | DELETE | `/v1/payments/cards/:id` | Customers. Can't remove the only card while a visit is coming up |
 | POST | `/v1/jobs/:id/pay` | Customers. Try again to pay what's due after a declined card |
+| GET | `/v1/onboarding` | Partners. The application: every step with what's still needed, answers, documents, signatures, ID and background status |
+| PUT | `/v1/onboarding/steps/:step` | Partners. Save answers for `business`, `identity`, `background`, `insurance`, `skills`, `safety`, or `payouts` |
+| GET | `/v1/onboarding/documents/:id` | The text of an agreement or disclosure, with its version |
+| POST | `/v1/onboarding/sign` | Partners. Body: `docId`, `name` (must match the legal name). Consent and disclosure need no name |
+| POST | `/v1/onboarding/files` | Partners. Body: `kind`, `filename`, `contentType` (PDF, JPG, PNG, HEIC), `data` (base64, up to 6 MB) |
+| GET, DELETE | `/v1/onboarding/files/:id` | Partners. Download or remove their own upload |
+| POST | `/v1/onboarding/identity` | Partners. Body: `returnUrl`. Returns Stripe's ID check `url` |
+| POST | `/v1/onboarding/identity/sync` | Partners. Picks up the ID check result |
+| POST | `/v1/onboarding/submit` | Partners. Body: `certify: true`. Every step must be done |
+| POST | `/v1/onboarding/arbitration-opt-out` | Partners. Within 30 days of signing the arbitration agreement |
+| GET | `/v1/admin/applications` | Staff. Applications, submitted first |
+| GET | `/v1/admin/applications/:id` | Staff. One application, including where each signature came from |
+| GET | `/v1/admin/documents/:id/file` | Staff. Download an upload |
+| POST | `/v1/admin/documents/:id/review` | Staff. Body: `status` (approved/rejected), `note` (required to reject) |
+| POST | `/v1/admin/applications/:id/background` | Staff. Body: `status` (pending/clear/consider/adverse), `note` |
+| POST | `/v1/admin/applications/:id/identity` | Staff. Verify ID by hand. Body: `status`, `over21` |
+| POST | `/v1/admin/applications/:id/decision` | Staff. Body: `decision` (approve/return/deny), `note` |
 | GET | `/v1/payouts` | Partners. Balance, reserve, schedule, payouts, and activity |
 | POST | `/v1/payouts/account` | Partners. Body: `returnUrl`. Returns Stripe's payout setup `url` |
 | POST | `/v1/payouts/account/sync` | Partners. Checks whether payout setup is finished |

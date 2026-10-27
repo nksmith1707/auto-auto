@@ -59,6 +59,15 @@ function Routes() {
             <Stack.Screen name="job" />
             <Stack.Screen name="chat" />
             <Stack.Screen name="payouts" />
+            <Stack.Screen name="onboarding/business" />
+            <Stack.Screen name="onboarding/identity" />
+            <Stack.Screen name="onboarding/background" />
+            <Stack.Screen name="onboarding/insurance" />
+            <Stack.Screen name="onboarding/skills" />
+            <Stack.Screen name="onboarding/safety" />
+            <Stack.Screen name="onboarding/agreements" />
+            <Stack.Screen name="onboarding/document" />
+            <Stack.Screen name="onboarding/review" />
           </Stack.Protected>
           <Stack.Protected guard={!signedIn}>
             <Stack.Screen name="sign-in" />

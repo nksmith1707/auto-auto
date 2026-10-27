@@ -40,7 +40,7 @@ function parseTime(v, field) {
   return ms;
 }
 
-export function createJobs({ db, settings, geocode = null, payments = null, now = () => Date.now(), log = () => {} }) {
+export function createJobs({ db, settings, geocode = null, payments = null, onboarding = null, now = () => Date.now(), log = () => {} }) {
   // Card charges talk to Stripe, so they run after the job change is saved, never inside a transaction.
   // A payment problem never undoes a job change; it shows on the job as a payment status instead.
   async function money(id, hook) {
@@ -111,6 +111,7 @@ export function createJobs({ db, settings, geocode = null, payments = null, now 
       if (!has || !need.every((x) => has.has(x))) continue;
       const d = reach(job, r, s);
       if (d === false) continue;
+      if (onboarding && (await onboarding.coverageProblem(r.id))) continue; // Insurance lapsed: no offers until renewed.
       out.push({ partnerId: r.id, distance: d });
     }
     return out.sort((a, b) => (a.distance ?? 1e9) - (b.distance ?? 1e9));
@@ -434,6 +435,8 @@ export function createJobs({ db, settings, geocode = null, payments = null, now 
       if (status !== "active") {
         return { jobs: [], blocked: status === "paused" ? "Your account is paused, so you can't take new jobs. Contact partner support." : "You can see and take jobs once your application is approved." };
       }
+      const lapsed = onboarding && (await onboarding.coverageProblem(user.id));
+      if (lapsed) return { jobs: [], blocked: lapsed };
       const offered = new Set((await db.all(`SELECT service_id FROM partner_services WHERE user_id = $1`, [user.id])).map((r) => r.service_id));
       const area = await db.get(`SELECT * FROM partner_service_areas WHERE user_id = $1`, [user.id]);
       // Only jobs open to everyone in range (instant jobs reach the board after one-at-a-time offers).
@@ -468,6 +471,8 @@ export function createJobs({ db, settings, geocode = null, payments = null, now 
     async accept(user, id) {
       return db.tx(async (t) => {
         if ((await partnerStatus(t, user.id)) !== "active") throw new HttpError(403, "not_active", "You can take jobs once your application is approved.");
+        const lapsed = onboarding && (await onboarding.coverageProblem(user.id));
+        if (lapsed) throw new HttpError(403, "coverage_lapsed", lapsed);
         const job = await forPartner(t, user, id, { mine: false });
         if (job.status !== "requested" || job.request_expires_at <= now()) throw conflict("Another partner already took this job, or it closed.");
         if (J(job.excluded_partners, []).includes(user.id)) throw conflict("This job went to another partner.");

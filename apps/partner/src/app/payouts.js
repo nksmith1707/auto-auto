@@ -6,7 +6,7 @@ import { money } from "../../../shared/api";
 import { fmtWhen } from "../../../shared/format";
 import { useAuth } from "../../../shared/session";
 import { openStripePage } from "../../../shared/stripePage";
-import { Button, Notice, Screen } from "../../../shared/ui";
+import { Button, Checkbox, Notice, Screen } from "../../../shared/ui";
 import { HeroFade } from "../components/Backdrops";
 import { TopBar } from "../components/TopBar";
 import { fonts, p } from "../theme";
@@ -23,6 +23,26 @@ function Line({ left, right, color, sub }) {
         {sub ? <Text style={{ fontFamily: fonts.body, fontSize: 12, color: p.muted }}>{sub}</Text> : null}
       </View>
       <Text style={{ fontFamily: fonts.displayX, fontSize: 15, color: color || p.ink }}>{right}</Text>
+    </View>
+  );
+}
+
+// The two tax statements from the application (Payouts & taxes step).
+function TaxStatements({ call }) {
+  const [a, setA] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => { call("onboarding").then((s) => setA(s.answers.payouts || {})).catch(() => {}); }, [call]);
+  if (!a) return null;
+  const set = (k) => async (v) => {
+    setA((x) => ({ ...x, [k]: v }));
+    try { await call("saveStep", "payouts", { [k]: v }); setErr(null); } catch (e) { setErr(e.message); }
+  };
+  return (
+    <View style={card}>
+      <Text style={label}>Taxes</Text>
+      <Checkbox checked={!!a.tax1099} onChange={set("tax1099")} testID="f-tax1099">I understand I'm an independent business. Auto-Auto doesn't withhold taxes, and I'll get a 1099 tax form from Stripe if my earnings meet IRS reporting thresholds.</Checkbox>
+      <Checkbox checked={!!a.tips} onChange={set("tips")} testID="f-tips">I understand I receive 100% of customer tips.</Checkbox>
+      {err ? <Notice tone="bad">{err}</Notice> : null}
     </View>
   );
 }
@@ -119,6 +139,8 @@ export default function Payouts() {
             )}
           </View>
         )}
+
+        <TaxStatements call={call} />
 
         {note ? <Notice tone="ok">{note}</Notice> : null}
         {err ? <Notice tone="bad">{err}</Notice> : null}

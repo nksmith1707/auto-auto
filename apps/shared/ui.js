@@ -99,11 +99,11 @@ export function Notice({ children, tone = "info", style }) {
   );
 }
 
-export function Checkbox({ checked, onChange, children, error }) {
+export function Checkbox({ checked, onChange, children, error, testID }) {
   const t = useTheme();
   return (
     <View style={{ gap: 6 }}>
-      <Pressable onPress={() => onChange(!checked)} accessibilityRole="checkbox" accessibilityState={{ checked }} style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}>
+      <Pressable onPress={() => onChange(!checked)} accessibilityRole="checkbox" accessibilityState={{ checked }} testID={testID} style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}>
         <View style={[styles.box, { borderColor: error ? t.c.bad : checked ? t.c.brand : t.c.line, backgroundColor: checked ? t.c.brand : t.c.inputBg }]}>
           {checked ? <Text style={{ color: "#fff", fontSize: 13, lineHeight: 16, fontFamily: t.f.bodyX }}>✓</Text> : null}
         </View>

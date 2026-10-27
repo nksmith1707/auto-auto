@@ -19,14 +19,14 @@ const SLOW = "Auto-Auto is taking too long to answer. Check your connection and 
 export function createApi({ baseUrl = DEFAULT_API_URL, fetchImpl = globalThis.fetch, timeoutMs = 20_000, userAgent } = {}) {
   const root = baseUrl.replace(/\/+$/, "");
 
-  async function request(method, path, { body, token } = {}) {
+  async function request(method, path, { body, token, timeout = timeoutMs } = {}) {
     const headers = { Accept: "application/json" };
     if (body !== undefined) headers["Content-Type"] = "application/json";
     if (token) headers.Authorization = `Bearer ${token}`;
     if (userAgent) headers["User-Agent"] = userAgent;
 
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    const timer = setTimeout(() => ctrl.abort(), timeout);
     let res;
     try {
       res = await fetchImpl(root + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: ctrl.signal });
@@ -107,6 +107,18 @@ export function createApi({ baseUrl = DEFAULT_API_URL, fetchImpl = globalThis.fe
     payoutSetup: (token, returnUrl) => request("POST", "/v1/payouts/account", { token, body: { returnUrl } }),
     syncPayouts: (token) => request("POST", "/v1/payouts/account/sync", { token, body: {} }),
     cashOut: (token) => request("POST", "/v1/payouts/instant", { token, body: {} }),
+
+    // Partner application (onboarding). Tax IDs, bank numbers, and ID photos go to Stripe, never here.
+    onboarding: (token) => request("GET", "/v1/onboarding", { token }),
+    saveStep: (token, step, body) => request("PUT", `/v1/onboarding/steps/${encodeURIComponent(step)}`, { token, body }),
+    onboardingDoc: (token, id) => request("GET", `/v1/onboarding/documents/${encodeURIComponent(id)}`, { token }),
+    signDoc: (token, docId, name) => request("POST", "/v1/onboarding/sign", { token, body: { docId, name } }),
+    uploadDoc: (token, body) => request("POST", "/v1/onboarding/files", { token, body, timeout: 120_000 }),
+    removeDoc: (token, id) => request("DELETE", `/v1/onboarding/files/${encodeURIComponent(id)}`, { token }),
+    startIdentity: (token, returnUrl) => request("POST", "/v1/onboarding/identity", { token, body: { returnUrl } }),
+    syncIdentity: (token) => request("POST", "/v1/onboarding/identity/sync", { token, body: {} }),
+    submitApplication: (token, certify) => request("POST", "/v1/onboarding/submit", { token, body: { certify } }),
+    optOutArbitration: (token) => request("POST", "/v1/onboarding/arbitration-opt-out", { token, body: {} }),
   };
 }
 
