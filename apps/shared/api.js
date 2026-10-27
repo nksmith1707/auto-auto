@@ -94,6 +94,19 @@ export function createApi({ baseUrl = DEFAULT_API_URL, fetchImpl = globalThis.fe
     saveServiceArea: (token, a) => request("PUT", "/v1/partner/service-area", { token, body: a }),
     partnerServices: (token) => request("GET", "/v1/partner/services", { token }),
     savePartnerServices: (token, serviceIds) => request("PUT", "/v1/partner/services", { token, body: { serviceIds } }),
+
+    // Payments (Stripe). Card numbers are typed on Stripe's own page, never in the app.
+    paymentsConfig: (token) => request("GET", "/v1/payments/config", { token }),
+    cards: (token) => request("GET", "/v1/payments/cards", { token }),
+    cardSetup: (token, returnUrl) => request("POST", "/v1/payments/cards/setup", { token, body: { returnUrl } }),
+    syncCards: (token) => request("POST", "/v1/payments/cards/sync", { token, body: {} }),
+    setDefaultCard: (token, id) => request("POST", `/v1/payments/cards/${encodeURIComponent(id)}/default`, { token, body: {} }),
+    removeCard: (token, id) => request("DELETE", `/v1/payments/cards/${encodeURIComponent(id)}`, { token }),
+    payJob: (token, id) => request("POST", `/v1/jobs/${encodeURIComponent(id)}/pay`, { token, body: {} }),
+    payouts: (token) => request("GET", "/v1/payouts", { token }),
+    payoutSetup: (token, returnUrl) => request("POST", "/v1/payouts/account", { token, body: { returnUrl } }),
+    syncPayouts: (token) => request("POST", "/v1/payouts/account/sync", { token, body: {} }),
+    cashOut: (token) => request("POST", "/v1/payouts/instant", { token, body: {} }),
   };
 }
 

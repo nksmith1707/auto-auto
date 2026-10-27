@@ -53,8 +53,8 @@ EXPO_PUBLIC_API_URL=http://192.168.1.20:3000 npx expo start --clear
 
 | App | Screens so far |
 |---|---|
-| Customer (`apps/customer`) | Splash, Log in / Sign up, Forgot password, Enter reset code, Home (vehicles, places, account), Add/edit vehicle with VIN decode, Prices for each vehicle with a visit estimate, Book a visit (ASAP or a 2-hour window), Your visits, Visit details (approve partner, approve add-ons and glass quotes, reschedule, cancel with fee preview, receipt, inspection report, warranty), Add/edit saved place, Edit your details, Log out, Log out on all devices |
-| Partner (`apps/partner`) | Splash, Log in, Apply (create partner account), Forgot password, Enter reset code, Application checklist, Service area (home base + travel radius), Services you offer (with pay per job), Open jobs and Your jobs (approved partners), Job screen (accept, start trip, arrive, check in, add-ons, glass quote, inspection, complete, no-show, cancel), Log out, Log out on all devices |
+| Customer (`apps/customer`) | Splash, Log in / Sign up, Forgot password, Enter reset code, Home (vehicles, places, account), Add/edit vehicle with VIN decode, Prices for each vehicle with a visit estimate, Book a visit (ASAP or a 2-hour window), Your visits, Visit details (approve partner, approve add-ons and glass quotes, reschedule, cancel with fee preview, receipt, inspection report, warranty), Add/edit saved place, Payment cards (add on Stripe's page, choose default, remove), payment status on each visit with Pay now if a card is declined, Edit your details, Log out, Log out on all devices |
+| Partner (`apps/partner`) | Splash, Log in, Apply (create partner account), Forgot password, Enter reset code, Application checklist, Service area (home base + travel radius), Services you offer (with pay per job), Open jobs and Your jobs (approved partners), Job screen (accept, start trip, arrive, check in, add-ons, glass quote, inspection, complete, no-show, cancel), Payouts (Stripe setup, balance, activity, instant cash-out), Log out, Log out on all devices |
 
 Notes:
 - Sessions are kept in the phone's secure storage (Keychain on iPhone, Keystore on Android), so people stay signed in until they log out or their session expires.
@@ -72,6 +72,19 @@ With `GOOGLE_MAPS_API_KEY` set on the server (Google Geocoding API), every saved
 - Addresses Google can't find are explained when they're saved. Addresses saved before the key was added are looked up when the server starts.
 
 Without the key (local development), partners see every job for the services they offer. Distances are straight-line miles; drive times are estimated.
+
+## Payments (Stripe)
+
+Set `STRIPE_SECRET_KEY` on the server (Render → the API service → Environment). Never put it in code or chat. `STRIPE_PUBLISHABLE_KEY` is optional (the test-mode key is the default). Without a secret key nothing is charged and booking doesn't need a card; partner earnings are still recorded.
+
+- **Cards:** customers add cards on Stripe's own page (opened from the app). We store only brand, last 4, and expiry. A card is required to book.
+- **Deposit:** jobs over $300 are charged the deposit at booking. If it's declined, the booking doesn't go through and the app says why.
+- **Hold:** the estimate is held on the card 24 hours before the visit (right away for visits sooner than that, ASAP, and roadside).
+- **Final charge:** at completion the hold is captured and anything extra (add-ons) is charged. If a card is declined, the partner is still paid; the customer sees what's due and can pay with another card.
+- **Cancels:** holds are released, the fee (if any) is kept, and the rest is refunded. The partner's share of a fee goes to their balance.
+- **Payouts:** partners set up a Stripe Express account from the app. Weekly (Mondays 9 PM Eastern) until 10 completed jobs, then daily at 9 PM. New partners have 5% held in reserve until daily payouts unlock. Instant cash-out costs $0.85.
+- **Test mode:** use card 4242 4242 4242 4242 with any future date, any CVC, any ZIP. Payouts in test mode need test money in the platform balance first: charge test card 4000 0000 0000 0077 once (its funds are available right away).
+- Not yet: parts cards (Stripe Issuing needs approval from Stripe), webhooks (the app checks status when people return from Stripe's pages).
 
 ## Deploy on Render
 
@@ -107,6 +120,18 @@ All requests and responses are JSON. Signed-in requests send `Authorization: Bea
 | PATCH, DELETE | `/v1/places/:id` | Customers, own places only. Removing the default hands it to the next place |
 | GET, PUT | `/v1/partner/service-area` | Partners. Home base address (private) and travel radius, 5 to 60 miles in steps of 5 |
 | GET, PUT | `/v1/partner/services` | Partners. Body: `serviceIds` from the catalog |
+| GET | `/v1/payments/config` | Whether payments are on, and the publishable key |
+| GET | `/v1/payments/cards` | Customers. Saved cards (brand, last 4, expiry, default) |
+| POST | `/v1/payments/cards/setup` | Customers. Body: `returnUrl` (the app's link). Returns Stripe's card page `url` |
+| POST | `/v1/payments/cards/sync` | Customers. Pulls in cards added on Stripe's page |
+| POST | `/v1/payments/cards/:id/default` | Customers. Use this card for payments (retries anything that was declined) |
+| DELETE | `/v1/payments/cards/:id` | Customers. Can't remove the only card while a visit is coming up |
+| POST | `/v1/jobs/:id/pay` | Customers. Try again to pay what's due after a declined card |
+| GET | `/v1/payouts` | Partners. Balance, reserve, schedule, payouts, and activity |
+| POST | `/v1/payouts/account` | Partners. Body: `returnUrl`. Returns Stripe's payout setup `url` |
+| POST | `/v1/payouts/account/sync` | Partners. Checks whether payout setup is finished |
+| POST | `/v1/payouts/instant` | Partners. Cash out the balance now ($0.85 fee) |
+| GET | `/pay/return` | Where Stripe's pages send people back; redirects into the app |
 | GET | `/v1/pricing/settings` | The live Pricing & rules version: every number RULES.md marks *setting*, with labels and limits |
 | GET | `/v1/pricing/settings/history` | Admins. Every version with its note and what changed |
 | POST | `/v1/pricing/settings` | Admins. Publish a new version. Body: `changes` (e.g. `{ "labor": 110 }`), `note` (required), `expectedVersion` |

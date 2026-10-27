@@ -1,5 +1,5 @@
 // The job record and its 11 steps (prototypes/job-flow.html), with the rules in docs/RULES.md.
-// Money is recorded here in cents; actually moving it (cards, deposits, payouts) comes with payments (step 8).
+// Money is recorded here in cents; payments/service.js moves it (cards, deposits, holds, charges, partner ledger).
 // Photos come with step 10, dispatch offers and distance matching with step 7.
 import { HttpError } from "../lib/http.js";
 import { newId } from "../auth/tokens.js";
@@ -40,7 +40,15 @@ function parseTime(v, field) {
   return ms;
 }
 
-export function createJobs({ db, settings, geocode = null, now = () => Date.now() }) {
+export function createJobs({ db, settings, geocode = null, payments = null, now = () => Date.now(), log = () => {} }) {
+  // Card charges talk to Stripe, so they run after the job change is saved, never inside a transaction.
+  // A payment problem never undoes a job change; it shows on the job as a payment status instead.
+  async function money(id, hook) {
+    if (!payments) return;
+    const job = await db.get(`SELECT * FROM jobs WHERE id = $1`, [id]);
+    try { await hook(job); } catch (e) { log(`[payments] ${e.message} (job ${id})`); }
+  }
+
   // Event IDs sort in the order events happened, even within the same millisecond.
   let seq = 0;
   const eventId = () => `${String(now()).padStart(15, "0")}-${String(seq++ % 1e6).padStart(6, "0")}-${newId().slice(0, 8)}`;
@@ -177,6 +185,7 @@ export function createJobs({ db, settings, geocode = null, now = () => Date.now(
         const r = await t.run(`UPDATE jobs SET status = 'expired', updated_at = $1 WHERE id = $2 AND status = 'requested'`, [at, j.id]);
         if (r.changes) await event(t, j.id, null, "expired", { note: "No partner accepted in time. Any deposit is refunded." });
       });
+      await money(j.id, (job) => job.status === "expired" && payments.afterCancel(job));
     }
     const late = await db.all(`SELECT * FROM jobs WHERE status = 'awaiting_approval' AND approval_deadline <= $1`, [at]);
     for (const j of late) {
@@ -185,6 +194,13 @@ export function createJobs({ db, settings, geocode = null, now = () => Date.now(
         if (cur.status !== "awaiting_approval") return;
         await releaseToRequested(t, cur, { exclude: cur.partner_id, kind: "approval_timed_out", data: { partnerId: cur.partner_id, note: "Customer didn't answer in time. The job goes to the next partner." } });
       });
+    }
+    // Card holds for visits coming up soon, and scheduled partner payouts.
+    if (payments && payments.enabled) {
+      try {
+        await payments.holdsDue((await settings.current()).settings);
+        await payments.runScheduled();
+      } catch (e) { log(`[payments] ${e.message}`); }
     }
     return { expired: expired.length, approvalTimeouts: late.length };
   }
@@ -231,6 +247,7 @@ export function createJobs({ db, settings, geocode = null, now = () => Date.now(
       cancelPreview: fee ? { feeCents: fee.cents, reason: fee.reason } : null,
       rescheduleCount: job.reschedule_count, freeReschedulesLeft: Math.max(0, FREE_RESCHEDULES - job.reschedule_count),
       partnerLate: partnerLate(job),
+      payment: payments ? await payments.summary(job, t) : null,
       timeline: events,
       createdAt: job.created_at, updatedAt: job.updated_at,
     };
@@ -374,6 +391,7 @@ export function createJobs({ db, settings, geocode = null, now = () => Date.now(
 
       const lines = priceAll(ids, vehicleOut(vehicle), s);
       const total = customerTotal(lines, s, { mobile: true });
+      if (payments) await payments.requireCard(user.id);
       const where = await locateJob(place);
       const id = newId();
       await db.tx(async (t) => {
@@ -383,10 +401,21 @@ export function createJobs({ db, settings, geocode = null, now = () => Date.now(
           [id, user.id, vehicle.id, place.id, kind, JSON.stringify(ids), cur.version, JSON.stringify(total), notes, windowStart, windowEnd, expires, b.approvePartner ? 1 : 0,
             where.lat, where.lng, kind === "scheduled" ? "board" : "offers", at],
         );
-        await event(t, id, user.id, "booked", { totalCents: total.totalCents, depositCents: total.depositCents, note: total.depositCents ? "Deposit is charged when payments go live (step 8)." : null });
-        // Instant jobs go to the closest qualified partner first.
-        await dispatchNext(t, await getJob(t, id));
+        await event(t, id, user.id, "booked", { totalCents: total.totalCents, depositCents: total.depositCents });
       });
+      // Deposit (jobs over the threshold) is charged now; if it fails, the booking doesn't go through.
+      if (payments) {
+        const r = await payments.afterBooking(await db.get(`SELECT * FROM jobs WHERE id = $1`, [id]), s);
+        if (!r.ok) {
+          await db.tx(async (t) => {
+            await update(t, { id }, { status: "cancelled", cancelled_at: now(), cancelled_by: "customer", cancel_reason: "deposit_failed", cancel_fee_cents: 0 });
+            await event(t, id, null, "deposit_failed", { note: r.message });
+          });
+          throw new HttpError(402, "card_declined", r.message, { fields: { card: r.message } });
+        }
+      }
+      // Instant jobs go to the closest qualified partner first.
+      await db.tx(async (t) => dispatchNext(t, await getJob(t, id)));
       return db.tx(async (t) => customerView(t, await getJob(t, id)));
     },
 
@@ -526,7 +555,7 @@ export function createJobs({ db, settings, geocode = null, now = () => Date.now(
     },
 
     async noShow(user, id) {
-      return db.tx(async (t) => {
+      await db.tx(async (t) => {
         const job = await forPartner(t, user, id);
         need(job, ["arrived"], "You can only mark a no-show after you've arrived.");
         const allowedAt = job.arrived_at + NO_SHOW_WAIT_MIN * MIN;
@@ -535,8 +564,9 @@ export function createJobs({ db, settings, geocode = null, now = () => Date.now(
         const fee = Math.round(s.enroute * 100);
         await update(t, job, { status: "cancelled", cancelled_at: now(), cancelled_by: "customer", cancel_reason: "no_show", cancel_fee_cents: fee, partner_comp_cents: partnerShare(fee, s) });
         await event(t, job.id, user.id, "no_show", { feeCents: fee, partnerCompCents: partnerShare(fee, s) });
-        return partnerView(t, await getJob(t, job.id), user.id);
       });
+      await money(id, (job) => payments.afterCancel(job));
+      return db.tx(async (t) => partnerView(t, await getJob(t, id), user.id));
     },
 
     // ---------- Step 7: Working — add-ons and glass quotes need the customer's OK ----------
@@ -591,7 +621,7 @@ export function createJobs({ db, settings, geocode = null, now = () => Date.now(
     },
 
     async decideAddon(user, id, addonId, approve) {
-      return db.tx(async (t) => {
+      const view = await db.tx(async (t) => {
         const job = await forCustomer(t, user, id);
         const a = await t.get(`SELECT * FROM job_addons WHERE id = $1 AND job_id = $2`, [String(addonId), job.id]);
         if (!a) throw notFound();
@@ -611,11 +641,14 @@ export function createJobs({ db, settings, geocode = null, now = () => Date.now(
         }
         return customerView(t, await getJob(t, job.id));
       });
+      if (view.status !== "cancelled") return view;
+      await money(view.id, (job) => payments.afterCancel(job));
+      return db.tx(async (t) => customerView(t, await getJob(t, view.id)));
     },
 
     // ---------- Steps 8 and 9: Wrap-up and Completed ----------
     async complete(user, id, b) {
-      return db.tx(async (t) => {
+      await db.tx(async (t) => {
         const job = await forPartner(t, user, id);
         need(job, ["in_progress"], "Check in before completing the job.");
         const ins = b.inspection;
@@ -662,7 +695,6 @@ export function createJobs({ db, settings, geocode = null, now = () => Date.now(
         const final = {
           lines, fees: total.fees, servicesCents: total.servicesCents, totalCents: total.totalCents, creditsCents,
           chargeCents: total.totalCents - creditsCents, partnerPay: pay, settingsVersion: job.settings_version,
-          note: "The card is charged when payments go live (step 8).",
         };
         const until = new Date(at);
         until.setMonth(until.getMonth() + s.warrantyMo);
@@ -671,13 +703,15 @@ export function createJobs({ db, settings, geocode = null, now = () => Date.now(
           warranty_until: until.getTime(), warranty_miles_until: job.odometer_in != null ? job.odometer_in + s.warrantyMi : null,
         });
         await event(t, job.id, user.id, "completed", { chargeCents: final.chargeCents, partnerEarningsCents: pay.earningsCents });
-        return partnerView(t, await getJob(t, job.id), user.id);
       });
+      // The partner's pay goes to their ledger no matter what; then the customer's card is charged.
+      await money(id, (job) => payments.afterComplete(job));
+      return db.tx(async (t) => partnerView(t, await getJob(t, id), user.id));
     },
 
     // ---------- Cancellations and changes ----------
     async cancelByCustomer(user, id, b) {
-      return db.tx(async (t) => {
+      await db.tx(async (t) => {
         const job = await forCustomer(t, user, id);
         need(job, ["requested", "awaiting_approval", "confirmed", "en_route", "arrived"], job.status === "in_progress" ? "Your partner already started the work. Talk to them in the app, or contact support." : "This job can't be cancelled anymore.");
         const s = await settingsFor(job.settings_version);
@@ -687,8 +721,9 @@ export function createJobs({ db, settings, geocode = null, now = () => Date.now(
         const reason = typeof b.reason === "string" ? b.reason.trim().slice(0, 200) || null : null;
         await update(t, job, { status: "cancelled", cancelled_at: now(), cancelled_by: "customer", cancel_reason: reason, cancel_fee_cents: fee.cents, partner_comp_cents: comp });
         await event(t, job.id, user.id, "cancelled", { by: "customer", feeCents: fee.cents, partnerCompCents: comp, reason });
-        return customerView(t, await getJob(t, job.id));
       });
+      await money(id, (job) => payments.afterCancel(job));
+      return db.tx(async (t) => customerView(t, await getJob(t, id)));
     },
 
     async cancelByPartner(user, id, b) {
@@ -713,7 +748,7 @@ export function createJobs({ db, settings, geocode = null, now = () => Date.now(
     },
 
     async reschedule(user, id, b) {
-      return db.tx(async (t) => {
+      await db.tx(async (t) => {
         const job = await forCustomer(t, user, id);
         need(job, ["requested", "awaiting_approval", "confirmed"], "This job can't be rescheduled now.");
         if (job.kind !== "scheduled") throw conflict("As-soon-as-possible and roadside requests can't be rescheduled. Cancel and book a scheduled visit instead.");
@@ -734,8 +769,9 @@ export function createJobs({ db, settings, geocode = null, now = () => Date.now(
             [newId(), job.customer_id, LATE_PARTNER_CREDIT_CENTS, "Your partner was late to leave", job.id, at]);
         }
         await event(t, job.id, user.id, "rescheduled", { from: job.window_start, to: start, feeCents, partnerLate: late, creditCents: late ? LATE_PARTNER_CREDIT_CENTS : 0 });
-        return customerView(t, await getJob(t, job.id));
       });
+      await money(id, async (job) => payments.afterReschedule(job, (await settings.current()).settings));
+      return db.tx(async (t) => customerView(t, await getJob(t, id)));
     },
 
     async switchPartner(user, id) {
@@ -748,6 +784,7 @@ export function createJobs({ db, settings, geocode = null, now = () => Date.now(
     },
 
     async addonsOf(id) { return addonsOf(db, id); },
+    rawJob: (id) => db.get(`SELECT * FROM jobs WHERE id = $1`, [String(id)]),
 
     // Addresses saved before the Google key was added get their map location now (runs once at startup).
     async backfillLocations(log = () => {}) {

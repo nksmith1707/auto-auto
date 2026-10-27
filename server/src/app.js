@@ -11,8 +11,11 @@ import { createSettingsStore } from "./pricing/settings.js";
 import { createJobs } from "./jobs/service.js";
 import { jobRoutes } from "./jobs/routes.js";
 import { createGeocoder } from "./maps/geo.js";
+import { createStripe } from "./payments/stripe.js";
+import { createPayments } from "./payments/service.js";
+import { paymentRoutes } from "./payments/routes.js";
 
-export function createApp({ db, config, mailer = createMailer({ isProd: config.isProd }), log = console, vinFetch = config.vinLookup ? globalThis.fetch : null, mapsFetch = globalThis.fetch, now = () => Date.now() }) {
+export function createApp({ db, config, mailer = createMailer({ isProd: config.isProd }), log = console, vinFetch = config.vinLookup ? globalThis.fetch : null, mapsFetch = globalThis.fetch, stripeFetch = globalThis.fetch, now = () => Date.now() }) {
   const router = createRouter();
   const auth = createAuth({ db, config, mailer });
 
@@ -27,8 +30,11 @@ export function createApp({ db, config, mailer = createMailer({ isProd: config.i
   profileRoutes(router, { db, auth, vinDecode, geocode });
   const settings = createSettingsStore({ db, now });
   pricingRoutes(router, { db, auth, settings });
-  const jobs = createJobs({ db, settings, geocode, now });
+  const stripe = createStripe({ secretKey: config.stripeSecretKey, baseUrl: config.stripeBaseUrl, fetchImpl: stripeFetch });
+  const payments = createPayments({ db, stripe, settings, now, log: (m) => (log.log ? log.log(m) : undefined) });
+  const jobs = createJobs({ db, settings, geocode, payments, now, log: (m) => (log.log ? log.log(m) : undefined) });
   jobRoutes(router, { db, auth, jobs, now });
+  paymentRoutes(router, { auth, payments, jobs, config });
 
   const server = http.createServer(async (req, res) => {
     const origin = req.headers.origin;
@@ -59,5 +65,5 @@ export function createApp({ db, config, mailer = createMailer({ isProd: config.i
   });
   server.requestTimeout = 15_000;
   server.headersTimeout = 10_000;
-  return { server, auth, mailer, settings, jobs };
+  return { server, auth, mailer, settings, jobs, payments };
 }

@@ -36,7 +36,8 @@
           "imageWidth": 160,
           "backgroundColor": "#060C1B"
         }
-      ]
+      ],
+      "expo-web-browser"
     ]
   }
 }

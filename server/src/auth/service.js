@@ -20,7 +20,8 @@ export function createAuth({ db, config, mailer, now = () => Date.now() }) {
       const p = await t.get(`SELECT status FROM partner_profiles WHERE user_id = $1`, [u.id]);
       const area = await t.get(`SELECT radius_miles FROM partner_service_areas WHERE user_id = $1`, [u.id]);
       const svc = await t.get(`SELECT COUNT(*) AS n FROM partner_services WHERE user_id = $1`, [u.id]);
-      out.partner = { status: p ? p.status : "applicant", serviceAreaSet: !!area, servicesCount: Number(svc ? svc.n : 0) };
+      const pay = await t.get(`SELECT payouts_enabled FROM payout_accounts WHERE user_id = $1`, [u.id]);
+      out.partner = { status: p ? p.status : "applicant", serviceAreaSet: !!area, servicesCount: Number(svc ? svc.n : 0), payoutsEnabled: !!(pay && pay.payouts_enabled) };
     }
     return out;
   }

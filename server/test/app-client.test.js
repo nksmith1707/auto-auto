@@ -41,7 +41,7 @@ test("partner: sign up needs a mobile number and starts as an applicant", async 
   await rejects(api.signup({ role: "partner", firstName: "Amanda", lastName: "Smith", email: "amanda.app@example.com", password: "Torque-Spec-2026", acceptTerms: true }),
     (e) => { assert.equal(e.status, 422); assert.equal(e.code, "invalid_input"); assert.match(e.fields.phone, /mobile number/); });
   const out = await api.signup({ role: "partner", firstName: "Amanda", lastName: "Smith", email: "amanda.app@example.com", phone: "(865) 555-0177", password: "Torque-Spec-2026", acceptTerms: true });
-  assert.deepEqual(out.user.partner, { status: "applicant", serviceAreaSet: false, servicesCount: 0 });
+  assert.deepEqual(out.user.partner, { status: "applicant", serviceAreaSet: false, servicesCount: 0, payoutsEnabled: false });
 });
 
 test("errors come back as plain-English messages per field", async () => {

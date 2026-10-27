@@ -173,7 +173,7 @@ test("partners set their service area and the services they offer", async () => 
   assert.equal(r.status, 422);
 
   const me = await app.call("GET", "/v1/me", { token: part });
-  assert.deepEqual(me.body.user.partner, { status: "applicant", serviceAreaSet: true, servicesCount: 3 });
+  assert.deepEqual(me.body.user.partner, { status: "applicant", serviceAreaSet: true, servicesCount: 3, payoutsEnabled: false });
 
   assert.equal((await app.call("GET", "/v1/partner/service-area", { token: cust })).status, 403);
   assert.equal((await app.call("PUT", "/v1/partner/services", { token: cust, body: { serviceIds: [] } })).status, 403);

@@ -1,7 +1,7 @@
 // Book a visit: where, when, and whether to approve the partner first. Price comes from the server and is locked at booking.
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { money } from "../../../shared/api";
 import { bookingDays, fmtDay, fmtTime } from "../../../shared/format";
 import { useAuth } from "../../../shared/session";
@@ -28,12 +28,18 @@ export default function Book() {
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const [pay, setPay] = useState(null); // { enabled, card }
   const back = () => (router.canGoBack() ? router.back() : router.replace("/home"));
 
   useEffect(() => {
     call("places").then(({ places: p }) => { setPlaces(p); const d = p.find((x) => x.isDefault) || p[0]; if (d) setPlaceId(d.id); }).catch((e) => setErr(e));
     call("quote", { vehicleId, serviceIds }).then((r) => { setQuote(r.quote); setVehicle(r.vehicle); }).catch((e) => setErr(e));
   }, [call, vehicleId, serviceIds]);
+
+  // Cards can change on the cards screen, so check again whenever this screen shows.
+  useFocusEffect(useCallback(() => {
+    call("cards").then((r) => setPay({ enabled: r.enabled, card: r.cards.find((c) => c.isDefault) || r.cards[0] || null })).catch(() => setPay({ enabled: false, card: null }));
+  }, [call]));
 
   const daySlots = (days.find((d) => d.day === day) || { slots: [] }).slots;
 
@@ -116,9 +122,30 @@ export default function Book() {
             {quote.depositCents ? <T v="hint">A {money(quote.depositCents, { always: true })} deposit applies to this booking.</T> : null}
           </Card>
 
+          {pay && pay.enabled ? (
+            <View style={{ gap: 8 }}>
+              <Text style={t.text.label}>Payment</Text>
+              {pay.card ? (
+                <Pressable onPress={() => router.push("/cards")} accessibilityRole="button" accessibilityLabel="Change card" testID="book-card"
+                  style={{ borderWidth: 1, borderColor: t.c.line, borderRadius: 14, padding: 12, backgroundColor: t.c.surface, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                  <T style={{ fontFamily: t.f.bodyB, textTransform: "capitalize" }}>{pay.card.brand} •••• {pay.card.last4}</T>
+                  <T v="hint" style={{ color: t.c.brand }}>Change</T>
+                </Pressable>
+              ) : (
+                <Card style={{ gap: 8 }}>
+                  <T v="muted">Add a card to book. It's saved now and charged after the work is done.</T>
+                  <Button title="Add a card" variant="ghost" onPress={() => router.push("/cards")} testID="book-add-card" />
+                </Card>
+              )}
+              {fields.card && fields.card !== message ? <T v="hint" style={{ color: t.c.bad }}>{fields.card}</T> : null}
+            </View>
+          ) : null}
+
           {message ? <Notice tone="bad">{message}</Notice> : null}
-          <Button title={when === "scheduled" ? "Book visit" : "Request now"} onPress={submit} loading={busy} disabled={!places || !places.length} testID="book-submit" />
-          <T v="hint" style={{ textAlign: "center" }}>Payments aren't connected yet, so nothing is charged.</T>
+          <Button title={when === "scheduled" ? "Book visit" : "Request now"} onPress={submit} loading={busy} disabled={!places || !places.length || (pay && pay.enabled && !pay.card)} testID="book-submit" />
+          <T v="hint" style={{ textAlign: "center" }}>{pay && pay.enabled
+            ? `${quote.depositCents ? "The deposit is charged now. " : ""}We hold the estimate on your card 24 hours before the visit and charge the final total when the work is done.`
+            : "Payments aren't turned on yet, so nothing is charged."}</T>
         </View>
       ) : null}
       {err && !quote ? <Notice tone="bad">{err.message}</Notice> : null}

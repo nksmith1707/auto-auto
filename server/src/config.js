@@ -20,6 +20,14 @@ export function loadConfig(env = process.env) {
     googleMapsKey: env.GOOGLE_MAPS_API_KEY || null,
     // Only changed for local testing against a stand-in.
     googleMapsBaseUrl: env.GOOGLE_MAPS_BASE_URL || "https://maps.googleapis.com",
+    // Stripe (step 8). The secret key lives only in Render's environment settings. Without it, nothing is charged.
+    stripeSecretKey: env.STRIPE_SECRET_KEY || null,
+    // The publishable key is safe to share (it can only start card forms). Test-mode key by default.
+    stripePublishableKey: env.STRIPE_PUBLISHABLE_KEY || "pk_test_51UUrPKCxf663Da6TZrQjyahzOvMBcowpM7AwRXs4uOqf5XaMLw8v57qLPAOYQMRCZvDX3yrjzV4WFwtGV4NDLKyJ00QkdEYXFD",
+    // Only changed for local testing against a stand-in.
+    stripeBaseUrl: env.STRIPE_BASE_URL || "https://api.stripe.com",
+    // This server's public address, for links back from Stripe's pages. Render sets RENDER_EXTERNAL_URL itself.
+    publicUrl: env.PUBLIC_URL || env.RENDER_EXTERNAL_URL || null,
     vinLookup: env.VIN_LOOKUP ? env.VIN_LOOKUP !== "off" : nodeEnv !== "test",
   };
   if (config.isProd && config.databaseUrl.startsWith("sqlite")) {

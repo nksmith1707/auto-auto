@@ -170,6 +170,10 @@ export default function Home() {
             </View>
           ))}
         </View>
+        <Card onPress={() => router.push("/cards")} accessibilityLabel="Payment cards" testID="open-cards" style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+          <Text style={[t.text.body, { fontFamily: t.f.bodyB }]}>Payment cards</Text>
+          <Text style={[t.text.body, { color: t.c.brand }]}>›</Text>
+        </Card>
       </View>
 
       <View style={{ marginTop: "auto", paddingTop: 28, gap: 10 }}>

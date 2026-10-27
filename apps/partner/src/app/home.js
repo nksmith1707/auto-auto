@@ -160,6 +160,7 @@ export default function Home() {
               <View style={[styles.card, { gap: 4 }]}>
                 <Step n={1} title="Service area" sub={user.partner.serviceAreaSet ? "Set" : "Where you'll travel for jobs"} done={!!user.partner.serviceAreaSet} onPress={() => router.push("/service-area")} />
                 <Step n={2} title="Services you offer" sub={`${user.partner.servicesCount} turned on`} done={!!user.partner.servicesCount} onPress={() => router.push("/services")} />
+                <Step n={3} title="Payouts" sub="Balance, cash out, and where we send your money" done={!!user.partner.payoutsEnabled} onPress={() => router.push("/payouts")} testID="step-payouts" />
               </View>
             </View>
           ) : null}

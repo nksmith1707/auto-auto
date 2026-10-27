@@ -33,6 +33,39 @@ function Row({ left, right, strong, hint }) {
   );
 }
 
+const PAY_KIND = { deposit: "Deposit", hold: "Card hold", charge: "Charged", fee: "Fee", refund: "Refunded" };
+const PAY_STATUS = { held: "held", captured: "charged", released: "released", succeeded: "", failed: "failed" };
+
+// What's been held, charged, and refunded on this visit, and a way to fix a declined card.
+function PaymentCard({ job, busy, onPay, onCards }) {
+  const t = useTheme();
+  const p = job.payment;
+  if (!p.items.length && !p.problem) {
+    if (["cancelled", "expired"].includes(job.status)) return null;
+    return <T v="hint" style={{ textAlign: "center" }}>We hold the estimate on your card 24 hours before the visit and charge the final total when the work is done.</T>;
+  }
+  return (
+    <Card style={{ gap: 6 }} testID="payment">
+      <T v="title">Payment</T>
+      {p.items.map((it) => (
+        <Row key={it.id} hint={it.kind === "hold" && it.status !== "captured"}
+          left={`${PAY_KIND[it.kind]}${PAY_STATUS[it.status] ? ` (${PAY_STATUS[it.status]})` : ""}${it.card ? ` · ${it.card}` : ""}`}
+          right={money((it.kind === "refund" ? -1 : 1) * (it.status === "captured" ? it.capturedCents : it.amountCents), { always: true })} />
+      ))}
+      <Row left="Paid" right={money(p.paidCents, { always: true })} strong />
+      {p.problem ? (
+        <View style={{ gap: 8, marginTop: 4 }}>
+          <Notice tone="bad">{p.dueCents ? `Your card was declined. ${money(p.dueCents, { always: true })} is still due.` : "We couldn't hold the estimate on your card. Add or choose another card so your visit stays on."}</Notice>
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <Button style={{ flex: 1 }} title="Change card" variant="ghost" onPress={onCards} />
+            <Button style={{ flex: 1 }} title={p.dueCents ? "Pay now" : "Try again"} onPress={onPay} loading={busy} testID="pay-now" />
+          </View>
+        </View>
+      ) : null}
+    </Card>
+  );
+}
+
 export default function JobScreen() {
   const t = useTheme();
   const router = useRouter();
@@ -149,7 +182,6 @@ export default function JobScreen() {
             <Row left="Total" right={money(job.final.totalCents, { always: true })} strong />
             {job.final.creditsCents ? <Row left="Account credit" right={money(-job.final.creditsCents, { always: true })} /> : null}
             {job.final.creditsCents ? <Row left="You pay" right={money(job.final.chargeCents, { always: true })} strong /> : null}
-            <T v="hint">Payments aren't connected yet, so nothing was charged.</T>
           </Card>
         ) : (
           <Card style={{ gap: 6 }}>
@@ -161,6 +193,9 @@ export default function JobScreen() {
             <Row left="Total" right={money(job.quote.totalCents + job.addons.filter((a) => a.status === "approved").reduce((s, a) => s + a.line.priceCents, 0), { always: true })} strong />
           </Card>
         )}
+
+        {job.payment && job.payment.enabled ? <PaymentCard job={job} busy={busy === "pay"}
+          onPay={() => act("pay", () => call("payJob", job.id))} onCards={() => router.push("/cards")} /> : null}
 
         {job.status === "completed" && job.inspection ? (
           <Card style={{ gap: 6 }}>
