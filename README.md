@@ -62,6 +62,17 @@ Notes:
 - **Password reset emails don't go out from the live API yet.** The API makes the code, but no email provider is connected (see "Not decided yet" in `docs/RULES.md`). The reset screens work end to end against a local API.
 - The test suite covers the apps' API client against the real server code (`server/test/app-client.test.js`). CI also builds both apps for iPhone, Android, and web on every push.
 
+## Dispatch and maps
+
+With `GOOGLE_MAPS_API_KEY` set on the server (Google Geocoding API), every saved place and partner home base gets a map location. Then:
+
+- "As soon as possible" and roadside requests go to the closest qualified partner first, 30 seconds each, up to 5 partners, then to everyone in range.
+- Scheduled requests go on the job board for partners whose service area covers the address.
+- Halfway through the request window, the search widens to 35 miles.
+- Addresses Google can't find are explained when they're saved. Addresses saved before the key was added are looked up when the server starts.
+
+Without the key (local development), partners see every job for the services they offer. Distances are straight-line miles; drive times are estimated.
+
 ## Deploy on Render
 
 `render.yaml` sets up everything: the API service and a Postgres database (about $13/month on the Starter and Basic-256mb plans).
@@ -110,6 +121,9 @@ All requests and responses are JSON. Signed-in requests send `Authorization: Bea
 | POST | `/v1/jobs/:id/accept`, `start-trip`, `arrive`, `check-in`, `addons`, `glass-quote`, `complete`, `no-show` | Partner steps (`check-in` needs `odometer`; `complete` needs the 8-item `inspection`) |
 | POST | `/v1/jobs/:id/approve-partner`, `decline-partner`, `addons/:addonId/approve`, `addons/:addonId/decline`, `reschedule`, `switch-partner` | Customer steps |
 | POST | `/v1/jobs/:id/cancel` | Customer or partner. Applies the cancellation rules; send `expectedFeeCents` to confirm the fee you showed |
+| GET | `/v1/jobs/offers` | Partners: job offers waiting for you (30 seconds each) |
+| POST | `/v1/jobs/:id/decline-offer` | Partners: pass on an offer; it goes to the next closest partner right away |
+| GET, POST | `/v1/jobs/:id/messages` | Customer and their partner: in-app chat (`body`). Phone numbers and emails are hidden |
 | GET | `/v1/admin/partners` | Staff: partners with status and review flags |
 | POST | `/v1/admin/partners/:id/status` | Staff: `status` (`active` approves), `reason` (required to pause) |
 

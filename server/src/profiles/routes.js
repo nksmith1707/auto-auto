@@ -6,6 +6,7 @@ import { requireUser } from "../auth/routes.js";
 import { newId } from "../auth/tokens.js";
 import { vinProblem } from "../vehicles/vin.js";
 import { CATEGORIES, SERVICES, serviceById, publicService } from "../catalog/services.js";
+import { addressLine } from "../maps/geo.js";
 
 const MAX_VEHICLES = 10;
 const MAX_PLACES = 10;
@@ -37,10 +38,21 @@ export const placeArea = (p) => `${p.city}, ${p.state} ${p.zip}`;
 
 function areaOut(a) {
   if (!a) return null;
-  return { street: a.street, city: a.city, state: a.state, zip: a.zip, radiusMiles: a.radius_miles, updatedAt: a.updated_at };
+  return { street: a.street, city: a.city, state: a.state, zip: a.zip, radiusMiles: a.radius_miles, onMap: a.geo_status === "ok", updatedAt: a.updated_at };
 }
 
-export function profileRoutes(router, { db, auth, vinDecode, now = () => Date.now() }) {
+export function profileRoutes(router, { db, auth, vinDecode, geocode = null, now = () => Date.now() }) {
+  // Finds an address on the map. A definite "not found" is shown to the person; a Google outage isn't
+  // (the address saves and is looked up again when it's needed).
+  async function locate(addr, field) {
+    if (!geocode) return { lat: null, lng: null, geo_status: null };
+    const g = await geocode(addressLine(addr));
+    if (g.status === "not_found") {
+      throw new HttpError(422, "invalid_input", "Some fields need fixing.", { fields: { [field]: "We couldn't find that address on the map. Check the street number, street name, and ZIP code." } });
+    }
+    return g.status === "ok" ? { lat: g.lat, lng: g.lng, geo_status: "ok" } : { lat: null, lng: null, geo_status: "error" };
+  }
+
   const vinLimiter = createLimiter({ limit: 30, windowMs: 60 * 60_000 });
 
   // ---------- Profile ----------
@@ -223,6 +235,7 @@ export function profileRoutes(router, { db, auth, vinDecode, now = () => Date.no
   router.post("/v1/places", async (req, res) => {
     const s = await requireUser(req, auth, ["customer"]);
     const p = readPlace(await readJson(req));
+    const geo = await locate(p, "street");
     const out = await db.tx(async (t) => {
       const count = Number((await t.get(`SELECT COUNT(*) AS n FROM places WHERE user_id = $1 AND archived_at IS NULL`, [s.user.id])).n);
       if (count >= MAX_PLACES) throw new HttpError(422, "too_many", `You can save up to ${MAX_PLACES} places. Remove one first.`);
@@ -232,9 +245,9 @@ export function profileRoutes(router, { db, auth, vinDecode, now = () => Date.no
       const id = newId();
       const at = now();
       await t.run(
-        `INSERT INTO places (id, user_id, label, street, unit, city, state, zip, parking, notes, is_default, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)`,
-        [id, s.user.id, p.label, p.street, p.unit, p.city, p.state, p.zip, p.parking, p.notes, def, at],
+        `INSERT INTO places (id, user_id, label, street, unit, city, state, zip, parking, notes, is_default, lat, lng, geo_status, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $15)`,
+        [id, s.user.id, p.label, p.street, p.unit, p.city, p.state, p.zip, p.parking, p.notes, def, geo.lat, geo.lng, geo.geo_status, at],
       );
       return t.get(`SELECT * FROM places WHERE id = $1`, [id]);
     });
@@ -250,6 +263,12 @@ export function profileRoutes(router, { db, auth, vinDecode, now = () => Date.no
   router.patch("/v1/places/:id", async (req, res) => {
     const s = await requireUser(req, auth, ["customer"]);
     const p = readPlace(await readJson(req), { partial: true });
+    // A changed address is looked up on the map again.
+    if (["street", "city", "state", "zip"].some((k) => k in p)) {
+      const before = await ownPlace(db, s, req.params.id);
+      const merged = { ...before, ...p };
+      if (["street", "city", "state", "zip"].some((k) => merged[k] !== before[k])) Object.assign(p, await locate(merged, "street"));
+    }
     const out = await db.tx(async (t) => {
       const cur = await ownPlace(t, s, req.params.id);
       if (p.is_default === 0 && cur.is_default) delete p.is_default; // Make another place the default instead.
@@ -299,12 +318,15 @@ export function profileRoutes(router, { db, auth, vinDecode, now = () => Date.no
     const r = c.int("radiusMiles", b.radiusMiles, { min: RADIUS.min, max: RADIUS.max, label: "your travel radius", required: true });
     if (r != null && r % RADIUS.step) c.add("radiusMiles", `Pick a radius in steps of ${RADIUS.step} miles.`);
     c.done();
+    const prev = await db.get(`SELECT * FROM partner_service_areas WHERE user_id = $1`, [s.user.id]);
+    const same = prev && prev.street === street && prev.city === city && prev.state === state && prev.zip === zip && prev.geo_status === "ok";
+    const geo = same ? { lat: prev.lat, lng: prev.lng, geo_status: "ok" } : await locate({ street, city, state, zip }, "street");
     const at = now();
     await db.run(
-      `INSERT INTO partner_service_areas (user_id, street, city, state, zip, radius_miles, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+      `INSERT INTO partner_service_areas (user_id, street, city, state, zip, radius_miles, lat, lng, geo_status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
        ON CONFLICT (user_id) DO UPDATE SET street = excluded.street, city = excluded.city, state = excluded.state, zip = excluded.zip,
-         radius_miles = excluded.radius_miles, lat = NULL, lng = NULL, updated_at = excluded.updated_at`,
-      [s.user.id, street, city, state, zip, r, at],
+         radius_miles = excluded.radius_miles, lat = excluded.lat, lng = excluded.lng, geo_status = excluded.geo_status, updated_at = excluded.updated_at`,
+      [s.user.id, street, city, state, zip, r, geo.lat, geo.lng, geo.geo_status, at],
     );
     send(res, 200, { serviceArea: areaOut(await db.get(`SELECT * FROM partner_service_areas WHERE user_id = $1`, [s.user.id])) });
   });

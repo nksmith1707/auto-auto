@@ -16,6 +16,10 @@ export function loadConfig(env = process.env) {
     trustProxy: env.TRUST_PROXY === "true",
     appUrl: env.APP_URL || "http://localhost:3000",
     // Look up VIN details (model, trim, engine) from NHTSA's free vPIC service. Off in tests; set VIN_LOOKUP=off to disable.
+    // Google Maps key for turning addresses into map locations (dispatch). Without it, partners see every job for their services.
+    googleMapsKey: env.GOOGLE_MAPS_API_KEY || null,
+    // Only changed for local testing against a stand-in.
+    googleMapsBaseUrl: env.GOOGLE_MAPS_BASE_URL || "https://maps.googleapis.com",
     vinLookup: env.VIN_LOOKUP ? env.VIN_LOOKUP !== "off" : nodeEnv !== "test",
   };
   if (config.isProd && config.databaseUrl.startsWith("sqlite")) {

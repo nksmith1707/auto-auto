@@ -10,8 +10,9 @@ import { pricingRoutes } from "./pricing/routes.js";
 import { createSettingsStore } from "./pricing/settings.js";
 import { createJobs } from "./jobs/service.js";
 import { jobRoutes } from "./jobs/routes.js";
+import { createGeocoder } from "./maps/geo.js";
 
-export function createApp({ db, config, mailer = createMailer({ isProd: config.isProd }), log = console, vinFetch = config.vinLookup ? globalThis.fetch : null, now = () => Date.now() }) {
+export function createApp({ db, config, mailer = createMailer({ isProd: config.isProd }), log = console, vinFetch = config.vinLookup ? globalThis.fetch : null, mapsFetch = globalThis.fetch, now = () => Date.now() }) {
   const router = createRouter();
   const auth = createAuth({ db, config, mailer });
 
@@ -22,10 +23,11 @@ export function createApp({ db, config, mailer = createMailer({ isProd: config.i
   });
   authRoutes(router, { auth, config });
   const vinDecode = createVinDecoder({ db, fetchImpl: vinFetch, log: (m) => log.log ? log.log(m) : undefined });
-  profileRoutes(router, { db, auth, vinDecode });
+  const geocode = createGeocoder({ apiKey: config.googleMapsKey, baseUrl: config.googleMapsBaseUrl, fetchImpl: mapsFetch, log: (m) => (log.log ? log.log(m) : undefined) });
+  profileRoutes(router, { db, auth, vinDecode, geocode });
   const settings = createSettingsStore({ db, now });
   pricingRoutes(router, { db, auth, settings });
-  const jobs = createJobs({ db, settings, now });
+  const jobs = createJobs({ db, settings, geocode, now });
   jobRoutes(router, { db, auth, jobs, now });
 
   const server = http.createServer(async (req, res) => {

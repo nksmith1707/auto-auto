@@ -14,7 +14,7 @@ export async function startTestApp(env = {}, opts = {}) {
   }
   await migrate(db);
   const mailer = createMailer({ isProd: false, log: () => {} });
-  const { server, settings } = createApp({ db, config, mailer, log: { error: () => {}, log: () => {} }, ...opts });
+  const { server, settings, jobs } = createApp({ db, config, mailer, log: { error: () => {}, log: () => {} }, ...opts });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const base = `http://127.0.0.1:${server.address().port}`;
   const call = async (method, path, { body, token, headers = {}, raw } = {}) => {
@@ -27,7 +27,7 @@ export async function startTestApp(env = {}, opts = {}) {
     return { status: res.status, headers: res.headers, body: text ? JSON.parse(text) : null };
   };
   return {
-    db, mailer, call, base, settings,
+    db, mailer, call, base, settings, jobs,
     async close() { await new Promise((r) => server.close(r)); await db.close(); },
   };
 }

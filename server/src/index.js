@@ -21,8 +21,9 @@ for (let attempt = 1; ; attempt++) {
 await migrate(db, { log: (m) => console.log(`[migrate] ${m}`) });
 
 const { server, jobs } = createApp({ db, config });
-// Close requests nobody accepted and approvals that ran out, once a minute.
-setInterval(() => jobs.sweep().catch((e) => console.error("[jobs] sweep failed", e)), 60_000).unref();
+// Every 5 seconds: move offers along (30 seconds each), widen searches, close requests nobody took, and approvals that ran out.
+jobs.backfillLocations((m) => console.log(m)).catch((e) => console.error("[maps] backfill failed", e));
+setInterval(() => jobs.sweep().catch((e) => console.error("[jobs] sweep failed", e)), 5_000).unref();
 server.listen(config.port, () => console.log(`Auto-Auto API listening on port ${config.port} (${config.nodeEnv})`));
 
 const stop = async () => {

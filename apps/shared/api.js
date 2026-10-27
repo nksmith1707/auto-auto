@@ -84,6 +84,9 @@ export function createApi({ baseUrl = DEFAULT_API_URL, fetchImpl = globalThis.fe
     job: (token, id) => request("GET", `/v1/jobs/${encodeURIComponent(id)}`, { token }),
     book: (token, body) => request("POST", "/v1/jobs", { token, body }),
     jobBoard: (token) => request("GET", "/v1/jobs/board", { token }),
+    offers: (token) => request("GET", "/v1/jobs/offers", { token }),
+    messages: (token, id) => request("GET", `/v1/jobs/${encodeURIComponent(id)}/messages`, { token }),
+    sendMessage: (token, id, body) => request("POST", `/v1/jobs/${encodeURIComponent(id)}/messages`, { token, body: { body } }),
     jobAction: (token, id, action, body) => request("POST", `/v1/jobs/${encodeURIComponent(id)}/${action}`, { token, body: body || {} }),
     addonDecision: (token, id, addonId, approve) => request("POST", `/v1/jobs/${encodeURIComponent(id)}/addons/${encodeURIComponent(addonId)}/${approve ? "approve" : "decline"}`, { token, body: {} }),
 

@@ -52,7 +52,7 @@ function JobList({ title, jobs, empty, onOpen, board }) {
             <Text style={{ fontFamily: fonts.displayX, fontSize: 16, color: p.money }}>{money((j.final ? j.final.partnerPay : j.pay).earningsCents)}</Text>
           </View>
           <Text style={{ fontFamily: fonts.body, fontSize: 13, color: p.muted }}>
-            {KIND[j.kind] ? `${KIND[j.kind]} · ` : ""}{j.kind === "scheduled" ? fmtWindow(j.windowStart, j.windowEnd) : `open ${fmtLeft(j.requestExpiresAt - Date.now())} more`} · {j.area}
+            {KIND[j.kind] ? `${KIND[j.kind]} · ` : ""}{j.kind === "scheduled" ? fmtWindow(j.windowStart, j.windowEnd) : `open ${fmtLeft(j.requestExpiresAt - Date.now())} more`} · {j.area}{j.distanceMiles != null ? ` · ${j.distanceMiles} mi` : ""}
           </Text>
           <Text style={{ fontFamily: fonts.bodyB, fontSize: 12, color: board ? p.brandText : p.ok }}>{board ? `${j.vehicle.year} ${j.vehicle.make} ${j.vehicle.model}` : STATUS_TXT[j.status]}</Text>
         </Pressable>
@@ -73,6 +73,26 @@ export default function Home() {
       setJobs({ mine: m.jobs, board: b.jobs, blocked: b.blocked });
     } catch { /* shown as empty; pull to refresh */ }
   }, [call]);
+  // Instant job offers: 30 seconds each, so check every 5 seconds while home is open.
+  const [offers, setOffers] = useState([]);
+  const [nowTick, setNowTick] = useState(Date.now());
+  const [offerBusy, setOfferBusy] = useState(null);
+  const loadOffers = useCallback(async () => { try { setOffers((await call("offers")).offers); } catch {} }, [call]);
+  useFocusEffect(useCallback(() => {
+    if (!active) return undefined;
+    loadOffers();
+    const a = setInterval(loadOffers, 5000);
+    const b = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => { clearInterval(a); clearInterval(b); };
+  }, [active, loadOffers]));
+  async function answer(o, accept) {
+    setOfferBusy(o.offerId);
+    try {
+      if (accept) { await call("jobAction", o.job.id, "accept"); router.push({ pathname: "/job", params: { id: o.job.id } }); }
+      else await call("jobAction", o.job.id, "decline-offer");
+    } catch (e) { setErr(e.message); }
+    finally { setOfferBusy(null); loadOffers(); loadJobs(); }
+  }
   // Pick up changes made on other screens.
   useFocusEffect(useCallback(() => { refresh().catch(() => {}); loadJobs(); }, [refresh, loadJobs]));
   const [confirmAll, setConfirmAll] = useState(false);
@@ -111,6 +131,24 @@ export default function Home() {
           </View>
 
           {offline ? <Notice tone="bad" style={{ marginBottom: 14 }}>You're offline. Showing your saved account until the connection comes back.</Notice> : null}
+
+          {active ? offers.filter((o) => o.expiresAt > nowTick).map((o) => (
+            <View key={o.offerId} style={[styles.card, { borderColor: p.money, borderWidth: 2, marginBottom: 14, gap: 8 }]} testID="offer-card">
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={[styles.label, { color: p.money }]}>{o.job.kind === "roadside" ? "Roadside request" : "New job offer"}</Text>
+                <Text style={{ fontFamily: fonts.displayX, fontSize: 18, color: p.money }}>{Math.max(0, Math.ceil((o.expiresAt - nowTick) / 1000))}s</Text>
+              </View>
+              <Text style={{ fontFamily: fonts.displayX, fontSize: 20, color: p.ink }}>{o.job.services.map((x) => x.name).join(", ")}</Text>
+              <Text style={{ fontFamily: fonts.body, fontSize: 14, color: p.muted }}>
+                {o.job.vehicle.year} {o.job.vehicle.make} {o.job.vehicle.model} · {o.job.area}{o.distanceMiles != null ? ` · ${o.distanceMiles} mi (~${Math.max(5, Math.round(o.distanceMiles * 2.2))} min)` : ""}
+              </Text>
+              <Text style={{ fontFamily: fonts.bodyX, fontSize: 15, color: p.ink }}>You earn {money(o.job.pay.earningsCents)}{o.job.pay.partsReimbursedCents ? ` + ${money(o.job.pay.partsReimbursedCents)} parts at cost` : ""}</Text>
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <Button style={{ flex: 1 }} title="Pass" variant="ghost" onPress={() => answer(o, false)} loading={offerBusy === o.offerId} testID="offer-decline" />
+                <Button style={{ flex: 2 }} title="Accept" variant="money" onPress={() => answer(o, true)} loading={offerBusy === o.offerId} testID="offer-accept" />
+              </View>
+            </View>
+          )) : null}
 
           {active ? (
             <View style={{ gap: 14, marginBottom: 14 }}>

@@ -6,6 +6,7 @@ import { newId } from "../auth/tokens.js";
 import { serviceById } from "../catalog/services.js";
 import { priceLine, customerTotal, partnerPay, glassQuote, PricingError } from "../pricing/engine.js";
 import { vehicleOut, placeArea } from "../profiles/routes.js";
+import { milesBetween, driveMinutes, addressLine, maskContacts } from "../maps/geo.js";
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -39,7 +40,7 @@ function parseTime(v, field) {
   return ms;
 }
 
-export function createJobs({ db, settings, now = () => Date.now() }) {
+export function createJobs({ db, settings, geocode = null, now = () => Date.now() }) {
   // Event IDs sort in the order events happened, even within the same millisecond.
   let seq = 0;
   const eventId = () => `${String(now()).padStart(15, "0")}-${String(seq++ % 1e6).padStart(6, "0")}-${newId().slice(0, 8)}`;
@@ -72,16 +73,104 @@ export function createJobs({ db, settings, now = () => Date.now() }) {
     const s = await settingsFor(job.settings_version);
     const expires = job.kind === "scheduled" ? job.window_start : Math.max(job.request_expires_at, now() + (job.kind === "roadside" ? s.roadside : s.window) * HOUR);
     const next = await update(t, job, {
-      status: "requested", partner_id: null, accepted_at: null, confirmed_at: null, approval_deadline: null,
+      status: "requested", partner_id: null, accepted_at: null, confirmed_at: null, approval_deadline: null, dispatch_phase: "board",
       excluded_partners: JSON.stringify(excluded), priority: 1, request_expires_at: expires,
     });
     await event(t, job.id, actorId, kind, data);
     return next;
   }
 
-  // ---------- Time-based changes. Runs before every jobs request and once a minute in the server. ----------
+  // ---------- Dispatch (RULES.md, Dispatch) ----------
+  // Partners who could take this job: approved, offer every service on it, and the job is inside their circle
+  // (or inside the wider 35-mile search once it widens). Sorted closest first.
+  async function candidates(t, job, s) {
+    const rows = await t.all(
+      `SELECT u.id, a.lat, a.lng, a.radius_miles FROM users u JOIN partner_profiles p ON p.user_id = u.id
+       LEFT JOIN partner_service_areas a ON a.user_id = u.id WHERE p.status = 'active'`,
+    );
+    if (!rows.length) return [];
+    const need = J(job.service_ids, []);
+    const offered = new Map();
+    for (const r of await t.all(`SELECT user_id, service_id FROM partner_services`)) {
+      if (!offered.has(r.user_id)) offered.set(r.user_id, new Set());
+      offered.get(r.user_id).add(r.service_id);
+    }
+    const excluded = new Set(J(job.excluded_partners, []));
+    const out = [];
+    for (const r of rows) {
+      if (excluded.has(r.id) || r.id === job.customer_id) continue;
+      const has = offered.get(r.id);
+      if (!has || !need.every((x) => has.has(x))) continue;
+      const d = reach(job, r, s);
+      if (d === false) continue;
+      out.push({ partnerId: r.id, distance: d });
+    }
+    return out.sort((a, b) => (a.distance ?? 1e9) - (b.distance ?? 1e9));
+  }
+
+  // Distance in miles if the partner can reach the job, null if distance isn't known, false if out of range.
+  function reach(job, area, s) {
+    if (job.lat == null) return null; // No map location (no Google key or address not found yet): don't filter by distance.
+    if (!area || area.lat == null) return false;
+    const d = milesBetween({ lat: job.lat, lng: job.lng }, area);
+    const limit = job.widened_at ? Math.max(area.radius_miles, s.widenMi) : area.radius_miles;
+    return d <= limit ? Math.round(d * 10) / 10 : false;
+  }
+
+  // Instant jobs: send the next offer, or open the job to everyone in range once 5 partners have had a turn.
+  async function dispatchNext(t, job) {
+    if (job.status !== "requested" || job.dispatch_phase !== "offers") return;
+    const pending = await t.get(`SELECT id FROM job_offers WHERE job_id = $1 AND status = 'pending'`, [job.id]);
+    if (pending) return;
+    const s = await settingsFor(job.settings_version);
+    const tried = new Set((await t.all(`SELECT partner_id FROM job_offers WHERE job_id = $1`, [job.id])).map((r) => r.partner_id));
+    const next = job.offers_sent < s.offerMax && job.lat != null ? (await candidates(t, job, s)).find((c) => !tried.has(c.partnerId) && c.distance != null) : null;
+    if (!next) {
+      await update(t, job, { dispatch_phase: "board" });
+      await event(t, job.id, null, "sent_to_all", { note: job.offers_sent ? `${job.offers_sent} partners had a turn; now everyone in range can take it.` : "Everyone in range can take it." });
+      return;
+    }
+    const at = now();
+    await t.run(`INSERT INTO job_offers (id, job_id, partner_id, distance_miles, status, sent_at, expires_at) VALUES ($1, $2, $3, $4, 'pending', $5, $6)`,
+      [newId(), job.id, next.partnerId, next.distance, at, at + s.offerSecs * 1000]);
+    await update(t, job, { offers_sent: job.offers_sent + 1 });
+    await event(t, job.id, null, "offer_sent", { partnerId: next.partnerId, distanceMiles: next.distance });
+  }
+
+  // Looks up the job's address on the map if the place doesn't have a location yet.
+  async function locateJob(place) {
+    if (place.lat != null || !geocode || place.geo_status === "not_found") return { lat: place.lat, lng: place.lng };
+    const g = await geocode(addressLine(place));
+    if (g.status === "ok") {
+      await db.run(`UPDATE places SET lat = $1, lng = $2, geo_status = 'ok' WHERE id = $3`, [g.lat, g.lng, place.id]);
+      return { lat: g.lat, lng: g.lng };
+    }
+    if (g.status === "not_found") await db.run(`UPDATE places SET geo_status = 'not_found' WHERE id = $1`, [place.id]);
+    return { lat: null, lng: null };
+  }
+
+  // ---------- Time-based changes. Runs before every jobs request and every few seconds in the server. ----------
   async function sweep() {
     const at = now();
+    // Offers that ran out, then the next offer for each instant job that's waiting on one.
+    const lapsed = await db.all(`SELECT * FROM job_offers WHERE status = 'pending' AND expires_at <= $1`, [at]);
+    for (const o of lapsed) {
+      await db.tx(async (t) => {
+        const r = await t.run(`UPDATE job_offers SET status = 'expired', decided_at = $1 WHERE id = $2 AND status = 'pending'`, [at, o.id]);
+        if (r.changes) await event(t, o.job_id, null, "offer_expired", { partnerId: o.partner_id });
+      });
+    }
+    const waiting = await db.all(`SELECT * FROM jobs WHERE status = 'requested' AND dispatch_phase = 'offers' AND request_expires_at > $1`, [at]);
+    for (const j of waiting) await db.tx(async (t) => dispatchNext(t, await getJob(t, j.id)));
+    // Halfway through the request window the search widens (RULES.md: to 35 miles).
+    const toWiden = await db.all(`SELECT * FROM jobs WHERE status = 'requested' AND widened_at IS NULL AND created_at + (request_expires_at - created_at) / 2 <= $1 AND request_expires_at > $1`, [at]);
+    for (const j of toWiden) {
+      await db.tx(async (t) => {
+        const s = await settingsFor(j.settings_version);
+        const r = await t.run(`UPDATE jobs SET widened_at = $1, updated_at = $1 WHERE id = $2 AND widened_at IS NULL`, [at, j.id]);
+        if (r.changes) await event(t, j.id, null, "search_widened", { miles: s.widenMi });
+      });
+    }
     const expired = await db.all(`SELECT * FROM jobs WHERE status = 'requested' AND request_expires_at <= $1`, [at]);
     for (const j of expired) {
       await db.tx(async (t) => {
@@ -162,6 +251,8 @@ export function createJobs({ db, settings, now = () => Date.now() }) {
     const pay = partnerPay([...quote.lines, ...approvedExtra], s, { mobile: true });
     const showAddress = mine && ADDRESS_VISIBLE.has(job.status);
     const v = vehicleOut(vehicle);
+    const area = await t.get(`SELECT lat, lng FROM partner_service_areas WHERE user_id = $1`, [partnerId]);
+    const dist = job.lat != null && area && area.lat != null ? Math.round(milesBetween({ lat: job.lat, lng: job.lng }, area) * 10) / 10 : null;
     const out = {
       id: job.id, status: job.status, kind: job.kind, mine,
       customer: { name: shortName(cust) },
@@ -174,6 +265,7 @@ export function createJobs({ db, settings, now = () => Date.now() }) {
       pendingQuotes: quote.pending,
       pay: { ...(({ platformCents, ...rest }) => rest)(pay) },
       approvalDeadline: job.approval_deadline,
+      distanceMiles: dist, driveMinutes: driveMinutes(dist),
     };
     if (mine) {
       Object.assign(out, {
@@ -205,6 +297,19 @@ export function createJobs({ db, settings, now = () => Date.now() }) {
   async function partnerStatus(t, userId) {
     const p = await t.get(`SELECT status FROM partner_profiles WHERE user_id = $1`, [userId]);
     return p ? p.status : "applicant";
+  }
+
+  // Chat is open from when a partner is confirmed until 24 hours after the job ends.
+  const CHAT = ["confirmed", "en_route", "arrived", "in_progress", "completed", "cancelled"];
+  function chatOpen(job) {
+    if (["confirmed", "en_route", "arrived", "in_progress"].includes(job.status)) return true;
+    const end = job.completed_at || job.cancelled_at;
+    return !!(end && now() - end < DAY && job.partner_id);
+  }
+  async function chatJob(t, user, id) {
+    const job = await getJob(t, id);
+    if (!job || (job.customer_id !== user.id && job.partner_id !== user.id) || !CHAT.includes(job.status) || !job.partner_id) throw notFound();
+    return job;
   }
 
   function priceAll(serviceIds, vehicle, s) {
@@ -269,14 +374,18 @@ export function createJobs({ db, settings, now = () => Date.now() }) {
 
       const lines = priceAll(ids, vehicleOut(vehicle), s);
       const total = customerTotal(lines, s, { mobile: true });
+      const where = await locateJob(place);
       const id = newId();
       await db.tx(async (t) => {
         await t.run(
-          `INSERT INTO jobs (id, customer_id, vehicle_id, place_id, kind, status, service_ids, settings_version, quote, notes, window_start, window_end, request_expires_at, approve_partner, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, 'requested', $6, $7, $8, $9, $10, $11, $12, $13, $14, $14)`,
-          [id, user.id, vehicle.id, place.id, kind, JSON.stringify(ids), cur.version, JSON.stringify(total), notes, windowStart, windowEnd, expires, b.approvePartner ? 1 : 0, at],
+          `INSERT INTO jobs (id, customer_id, vehicle_id, place_id, kind, status, service_ids, settings_version, quote, notes, window_start, window_end, request_expires_at, approve_partner, lat, lng, dispatch_phase, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, 'requested', $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $17)`,
+          [id, user.id, vehicle.id, place.id, kind, JSON.stringify(ids), cur.version, JSON.stringify(total), notes, windowStart, windowEnd, expires, b.approvePartner ? 1 : 0,
+            where.lat, where.lng, kind === "scheduled" ? "board" : "offers", at],
         );
         await event(t, id, user.id, "booked", { totalCents: total.totalCents, depositCents: total.depositCents, note: total.depositCents ? "Deposit is charged when payments go live (step 8)." : null });
+        // Instant jobs go to the closest qualified partner first.
+        await dispatchNext(t, await getJob(t, id));
       });
       return db.tx(async (t) => customerView(t, await getJob(t, id)));
     },
@@ -297,9 +406,19 @@ export function createJobs({ db, settings, now = () => Date.now() }) {
         return { jobs: [], blocked: status === "paused" ? "Your account is paused, so you can't take new jobs. Contact partner support." : "You can see and take jobs once your application is approved." };
       }
       const offered = new Set((await db.all(`SELECT service_id FROM partner_services WHERE user_id = $1`, [user.id])).map((r) => r.service_id));
-      const rows = await db.all(`SELECT * FROM jobs WHERE status = 'requested' AND request_expires_at > $1 ORDER BY priority DESC, CASE kind WHEN 'roadside' THEN 0 WHEN 'asap' THEN 1 ELSE 2 END, window_start LIMIT 200`, [now()]);
-      const fits = rows.filter((j) => !J(j.excluded_partners, []).includes(user.id) && J(j.service_ids, []).every((id) => offered.has(id)));
-      return db.tx(async (t) => ({ jobs: await Promise.all(fits.slice(0, 50).map((j) => partnerView(t, j, user.id))), blocked: null, servicesOffered: offered.size }));
+      const area = await db.get(`SELECT * FROM partner_service_areas WHERE user_id = $1`, [user.id]);
+      // Only jobs open to everyone in range (instant jobs reach the board after one-at-a-time offers).
+      const rows = await db.all(`SELECT * FROM jobs WHERE status = 'requested' AND dispatch_phase = 'board' AND request_expires_at > $1 ORDER BY priority DESC, CASE kind WHEN 'roadside' THEN 0 WHEN 'asap' THEN 1 ELSE 2 END, window_start LIMIT 300`, [now()]);
+      const fits = [];
+      for (const j of rows) {
+        if (J(j.excluded_partners, []).includes(user.id) || !J(j.service_ids, []).every((id) => offered.has(id))) continue;
+        if (reach(j, area, await settingsFor(j.settings_version)) === false) continue;
+        fits.push(j);
+      }
+      return db.tx(async (t) => ({
+        jobs: await Promise.all(fits.slice(0, 50).map((j) => partnerView(t, j, user.id))), blocked: null, servicesOffered: offered.size,
+        serviceAreaOnMap: !!(area && area.geo_status === "ok"), mapsOn: !!geocode,
+      }));
     },
 
     async listForPartner(user) {
@@ -328,6 +447,12 @@ export function createJobs({ db, settings, now = () => Date.now() }) {
         if (missing.length) throw conflict(`You don't offer ${missing.map((x) => serviceById(x).name).join(", ")}. Turn it on in Services first.`);
         const s = await settingsFor(job.settings_version);
         const at = now();
+        const myOffer = await t.get(`SELECT * FROM job_offers WHERE job_id = $1 AND partner_id = $2 AND status = 'pending' AND expires_at > $3`, [job.id, user.id, at]);
+        if (!myOffer) {
+          if (job.dispatch_phase !== "board") throw conflict("This job is being offered to another partner right now.");
+          const area = await t.get(`SELECT * FROM partner_service_areas WHERE user_id = $1`, [user.id]);
+          if (reach(job, area, s) === false) throw conflict("This job is outside your service area.");
+        }
         const sameDay = job.kind !== "scheduled" || job.window_start - at < DAY;
         const fields = job.approve_partner
           ? { status: "awaiting_approval", partner_id: user.id, accepted_at: at, approval_deadline: at + (sameDay ? s.approveNow : s.approveLater) * MIN }
@@ -337,6 +462,8 @@ export function createJobs({ db, settings, now = () => Date.now() }) {
           [fields.status, user.id, at, fields.approval_deadline || null, fields.confirmed_at || null, job.id],
         );
         if (!r.changes) throw conflict("Another partner already took this job.");
+        if (myOffer) await t.run(`UPDATE job_offers SET status = 'accepted', decided_at = $1 WHERE id = $2`, [at, myOffer.id]);
+        await t.run(`UPDATE job_offers SET status = 'expired', decided_at = $1 WHERE job_id = $2 AND status = 'pending'`, [at, job.id]);
         await event(t, job.id, user.id, "accepted", { partnerId: user.id });
         if (!job.approve_partner) await event(t, job.id, user.id, "confirmed", null);
         return partnerView(t, await getJob(t, job.id), user.id);
@@ -621,5 +748,66 @@ export function createJobs({ db, settings, now = () => Date.now() }) {
     },
 
     async addonsOf(id) { return addonsOf(db, id); },
+
+    // Addresses saved before the Google key was added get their map location now (runs once at startup).
+    async backfillLocations(log = () => {}) {
+      if (!geocode) return { places: 0, areas: 0 };
+      let places = 0, areas = 0;
+      for (const p of await db.all(`SELECT * FROM places WHERE geo_status IS NULL AND archived_at IS NULL LIMIT 1000`)) {
+        const g = await geocode(addressLine(p));
+        await db.run(`UPDATE places SET lat = $1, lng = $2, geo_status = $3 WHERE id = $4`, [g.lat ?? null, g.lng ?? null, g.status, p.id]);
+        if (g.status === "ok") places++;
+      }
+      for (const a of await db.all(`SELECT * FROM partner_service_areas WHERE geo_status IS NULL OR geo_status = 'error' LIMIT 1000`)) {
+        const g = await geocode(addressLine(a));
+        await db.run(`UPDATE partner_service_areas SET lat = $1, lng = $2, geo_status = $3 WHERE user_id = $4`, [g.lat ?? null, g.lng ?? null, g.status, a.user_id]);
+        if (g.status === "ok") areas++;
+      }
+      if (places || areas) log(`[maps] located ${places} places and ${areas} service areas`);
+      return { places, areas };
+    },
+
+    // ---------- Offers (instant jobs, one partner at a time) ----------
+    async offersFor(user) {
+      const rows = await db.all(`SELECT o.*, j.status AS job_status FROM job_offers o JOIN jobs j ON j.id = o.job_id WHERE o.partner_id = $1 AND o.status = 'pending' AND o.expires_at > $2 ORDER BY o.sent_at`, [user.id, now()]);
+      return db.tx(async (t) => Promise.all(rows.map(async (o) => ({
+        offerId: o.id, expiresAt: o.expires_at, secondsLeft: Math.max(0, Math.round((o.expires_at - now()) / 1000)), distanceMiles: o.distance_miles,
+        job: await partnerView(t, await getJob(t, o.job_id), user.id),
+      }))));
+    },
+
+    async declineOffer(user, id) {
+      return db.tx(async (t) => {
+        const o = await t.get(`SELECT * FROM job_offers WHERE job_id = $1 AND partner_id = $2 AND status = 'pending'`, [String(id), user.id]);
+        if (!o) throw conflict("This offer already ended.");
+        await t.run(`UPDATE job_offers SET status = 'declined', decided_at = $1 WHERE id = $2`, [now(), o.id]);
+        await event(t, o.job_id, user.id, "offer_declined", { partnerId: user.id });
+        await dispatchNext(t, await getJob(t, o.job_id));
+        return { ok: true };
+      });
+    },
+
+    // ---------- In-app chat. Real phone numbers are never shared. ----------
+    async messages(user, id) {
+      return db.tx(async (t) => {
+        const job = await chatJob(t, user, id);
+        const rows = await t.all(`SELECT * FROM job_messages WHERE job_id = $1 ORDER BY id LIMIT 500`, [job.id]);
+        return { messages: rows.map((m) => ({ id: m.id, mine: m.sender_id === user.id, from: m.sender_role, body: m.body, at: m.created_at })), canSend: chatOpen(job) };
+      });
+    },
+
+    async sendMessage(user, id, b) {
+      return db.tx(async (t) => {
+        const job = await chatJob(t, user, id);
+        if (!chatOpen(job)) throw conflict("Messages for this job are closed.");
+        const body = typeof b.body === "string" ? b.body.trim() : "";
+        if (!body) throw bad("body", "Type a message.");
+        if (body.length > 1000) throw bad("body", "Keep messages under 1,000 characters.");
+        const masked = maskContacts(body);
+        const mid = eventId();
+        await t.run(`INSERT INTO job_messages (id, job_id, sender_id, sender_role, body, created_at) VALUES ($1, $2, $3, $4, $5, $6)`, [mid, job.id, user.id, user.role, masked, now()]);
+        return { id: mid, body: masked, hidden: masked !== body };
+      });
+    },
   };
 }

@@ -5,7 +5,7 @@ import { requireUser } from "../auth/routes.js";
 export function jobRoutes(router, { db, auth, jobs, now = () => Date.now() }) {
   // Time-based changes (expired requests, approvals that ran out) are applied before anyone looks at jobs.
   let lastSweep = 0;
-  const fresh = async () => { if (now() - lastSweep > 2000) { lastSweep = now(); await jobs.sweep(); } };
+  const fresh = async () => { if (now() - lastSweep > 1000) { lastSweep = now(); await jobs.sweep(); } };
   const who = async (req, roles) => { const s = await requireUser(req, auth, roles); await fresh(); return s.user; };
 
   // ---------- Customers and partners ----------
@@ -17,6 +17,26 @@ export function jobRoutes(router, { db, auth, jobs, now = () => Date.now() }) {
   router.get("/v1/jobs/board", async (req, res) => {
     const u = await who(req, ["partner"]);
     send(res, 200, await jobs.board(u));
+  });
+
+  router.get("/v1/jobs/offers", async (req, res) => {
+    const u = await who(req, ["partner"]);
+    send(res, 200, { offers: await jobs.offersFor(u) });
+  });
+
+  router.get("/v1/jobs/:id/messages", async (req, res) => {
+    const u = await who(req, ["customer", "partner"]);
+    send(res, 200, await jobs.messages(u, req.params.id));
+  });
+
+  router.post("/v1/jobs/:id/messages", async (req, res) => {
+    const u = await who(req, ["customer", "partner"]);
+    send(res, 201, await jobs.sendMessage(u, req.params.id, await readJson(req)));
+  });
+
+  router.post("/v1/jobs/:id/decline-offer", async (req, res) => {
+    const u = await who(req, ["partner"]);
+    send(res, 200, await jobs.declineOffer(u, req.params.id));
   });
 
   router.get("/v1/jobs/:id", async (req, res) => {

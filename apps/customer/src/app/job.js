@@ -19,6 +19,8 @@ const EVENT = {
   glass_approved: "You approved the glass quote", glass_declined: "You declined the glass quote", completed: "Completed", cancelled: "Cancelled", expired: "No partner found in time",
   rescheduled: "Rescheduled", partner_cancelled: "Partner cancelled; finding another partner", partner_late_cancel: "Partner cancelled late; $15 credit added",
   switched_partner: "You switched partners", no_show: "Marked as a no-show",
+  offer_sent: "Offered to a nearby partner", offer_declined: "A partner passed", offer_expired: "No answer; trying the next partner",
+  sent_to_all: "Sent to all partners nearby", search_widened: "Widened the search to 35 miles", offer_accepted: "A partner accepted",
 };
 
 function Row({ left, right, strong, hint }) {
@@ -108,7 +110,10 @@ export default function JobScreen() {
           <Card style={{ gap: 4 }}>
             <Text style={t.text.label}>Your partner</Text>
             <T style={{ fontFamily: t.f.displayX, fontSize: 18 }}>{job.partner.name}</T>
-            <T v="hint">{job.partner.jobsDone} job{job.partner.jobsDone === 1 ? "" : "s"} done · Chat and calls through the app come next; phone numbers are never shared.</T>
+            <T v="hint">{job.partner.jobsDone} job{job.partner.jobsDone === 1 ? "" : "s"} done · Phone numbers are never shared.</T>
+            {["confirmed", "en_route", "arrived", "in_progress"].includes(job.status) || (["completed", "cancelled"].includes(job.status) && Date.now() - (job.updatedAt || 0) < 86_400_000) ? (
+              <Button title={`Message ${job.partner.name.split(" ")[0]}`} variant="ghost" onPress={() => router.push({ pathname: "/chat", params: { id: job.id, name: job.partner.name } })} testID="open-chat" />
+            ) : null}
           </Card>
         ) : null}
 

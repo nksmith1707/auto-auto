@@ -57,6 +57,7 @@ function Routes() {
             <Stack.Screen name="service-area" />
             <Stack.Screen name="services" />
             <Stack.Screen name="job" />
+            <Stack.Screen name="chat" />
           </Stack.Protected>
           <Stack.Protected guard={!signedIn}>
             <Stack.Screen name="sign-in" />

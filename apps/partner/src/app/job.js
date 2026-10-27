@@ -116,6 +116,7 @@ export default function PartnerJob() {
           ) : (
             <>
               <Text style={{ fontFamily: fonts.displayX, fontSize: 18, color: p.ink }}>{job.area}</Text>
+              {job.distanceMiles != null ? <Text style={{ fontFamily: fonts.bodyB, fontSize: 14, color: p.brandText }}>{job.distanceMiles} miles away · about {job.driveMinutes} min</Text> : null}
               <Text style={{ fontFamily: fonts.body, fontSize: 13, color: p.muted }}>The exact address unlocks when you tap Start trip.</Text>
             </>
           )}
@@ -140,7 +141,12 @@ export default function PartnerJob() {
         {err ? <Notice tone="bad">{err}</Notice> : null}
 
         {s === "requested" ? (
-          <Button title="Accept job" big onPress={() => go("accept")} loading={busy === "accept"} testID="accept-job" />
+          <View style={{ gap: 8 }}>
+            <Button title="Accept job" big onPress={() => go("accept")} loading={busy === "accept"} testID="accept-job" />
+          </View>
+        ) : null}
+        {["confirmed", "en_route", "arrived", "in_progress"].includes(s) ? (
+          <Button title={`Message ${job.customer.name.split(" ")[0]}`} variant="ghost" onPress={() => router.push({ pathname: "/chat", params: { id: job.id, name: job.customer.name } })} testID="open-chat" />
         ) : null}
         {s === "awaiting_approval" ? <Notice>Waiting for the customer to confirm you. They have {fmtLeft(job.approvalDeadline - nowTick)} to answer.</Notice> : null}
 
