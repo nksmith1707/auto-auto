@@ -92,6 +92,8 @@ export function createFakeStripe({ checkoutBase = "https://checkout.stripe.test"
     if (method === "POST" && path === "/v1/accounts") return err(400, "invalid_request_error", "v1_accounts_unsupported", "Stripe no longer recommends Accounts v1 for new Connect integrations. Create connected accounts with POST /v2/core/accounts instead.");
     if (method === "POST" && path === "/v2/core/accounts") {
       const rec = p.configuration && p.configuration.recipient && p.configuration.recipient.capabilities && p.configuration.recipient.capabilities.stripe_balance;
+      const unknown = rec && Object.keys(rec).find((k) => k !== "stripe_transfers");
+      if (unknown) return err(400, "invalid_request_error", "invalid_fields", `Some fields in the request were invalid: 'configuration.recipient.capabilities.stripe_balance.${unknown}: Unknown field.'`);
       if (!rec || !rec.stripe_transfers || rec.stripe_transfers.requested !== true) return err(400, "invalid_request_error", "parameter_missing", "Request the stripe_transfers capability");
       const resp = p.defaults && p.defaults.responsibilities;
       if (!["express", "none"].includes(p.dashboard) || !resp || resp.losses_collector !== "application" || resp.fees_collector !== "application") return err(400, "invalid_request_error", "invalid_combination", "Recipient-only accounts need dashboard express/none and application responsibilities");

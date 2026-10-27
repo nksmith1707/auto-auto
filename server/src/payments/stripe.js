@@ -78,13 +78,13 @@ export function createStripe({ secretKey, fetchImpl = globalThis.fetch, baseUrl 
     cancelPaymentIntent: (id) => req("POST", `/v1/payment_intents/${encodeURIComponent(id)}/cancel`, {}),
     refund: (p, idempotencyKey) => req("POST", "/v1/refunds", p, { idempotencyKey }),
     // Partner payouts (Connect Express).
-    // Partner payout accounts use Accounts v2 ("recipient": receives transfers and pays out to their bank).
+    // Partner payout accounts use Accounts v2 ("recipient": receives transfers; Stripe pays them out to the partner's bank).
     // Stripe accepts v2 account IDs on v1 endpoints too, so status checks and transfers stay on v1.
     createAccount: ({ email, name, metadata }) => req("POST", "/v2/core/accounts", {
       contact_email: email, display_name: name, dashboard: "express",
       identity: { country: "us", entity_type: "individual" },
       defaults: { currency: "usd", responsibilities: { fees_collector: "application", losses_collector: "application" } },
-      configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true }, payouts: { requested: true } } } } },
+      configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true } } } } },
       metadata,
     }, { v2: true }),
     getAccount: (id) => req("GET", `/v1/accounts/${encodeURIComponent(id)}`),
