@@ -34,7 +34,7 @@ export default function Identity() {
   const id = app ? app.identity : null;
   const [stLabel, stColor] = id ? ID_STATUS[id.status] || ID_STATUS.not_started : ID_STATUS.not_started;
   return (
-    <StepScreen title="Identity & driving" app={app} step={a.step} err={err} onSave={() => a.save()} saving={busy === "save"}>
+    <StepScreen title="Identity & driving" app={app} step={a.step} err={err} onSave={() => a.save()} saving={busy === "save"} saved={a.saved}>
       {app ? (
         <>
           <Section title="Your driver's license">

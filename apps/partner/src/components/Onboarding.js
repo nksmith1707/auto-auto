@@ -1,6 +1,6 @@
 // Building blocks for the partner application screens: loading and saving a step, the "still needed" list,
 // certificate uploads, and typed-name signatures.
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, Platform, Pressable, Text, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import * as DocumentPicker from "expo-document-picker";
@@ -20,12 +20,23 @@ export const h3 = { fontFamily: fonts.displayX, fontSize: 17, color: p.ink };
 // Loads the application whenever the screen shows. `form` is a local copy of one step's answers.
 export function useApplication(stepId) {
   const { call, refresh } = useAuth();
+  const router = useRouter();
   const [app, setApp] = useState(null);
+  const [saved, setSaved] = useState(false);
+  const wasDone = useRef(null);
   const [form, setForm] = useState({});
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(null);
-  const take = useCallback((s, resetForm) => {
+  // Back to the checklist when a step becomes complete, or when Save is tapped on a complete step.
+  const leave = () => (router.canGoBack() ? router.back() : router.replace("/home"));
+  const take = useCallback((s, resetForm, { explicit = false } = {}) => {
     setApp(s);
+    const st = stepId ? s.steps.find((x) => x.id === stepId) : null;
+    if (st) {
+      const before = wasDone.current;
+      wasDone.current = st.done;
+      if (!resetForm && st.done && (explicit || before === false)) setTimeout(leave, 350);
+    }
     if (resetForm && stepId) setForm({ ...((s.answers || {})[stepId] || {}), ...(stepId === "business" ? { legalFirst: s.legalName.first || "", legalMiddle: s.legalName.middle || "", legalLast: s.legalName.last || "" } : {}) });
   }, [stepId]);
   const load = useCallback(async () => {
@@ -34,19 +45,29 @@ export function useApplication(stepId) {
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const set = (k) => (v) => { setForm((f) => ({ ...f, [k]: v })); setErr((e) => (e && e.fields && e.fields[k] ? { ...e, fields: { ...e.fields, [k]: undefined } } : e)); };
-  async function run(which, fn) {
+  async function run(which, fn, opts) {
     setErr(null);
+    setSaved(false);
     setBusy(which);
-    try { const s = await fn(); if (s && s.steps) take(s, false); refresh().catch(() => {}); return s; } catch (e) { setErr(e); return null; } finally { setBusy(null); }
+    try { const s = await fn(); if (s && s.steps) take(s, false, opts); refresh().catch(() => {}); return s; } catch (e) { setErr(e); return null; } finally { setBusy(null); }
   }
-  const save = (patch) => run("save", () => call("saveStep", stepId, patch || form));
-  const sign = (docId, name) => run(`sign-${docId}`, () => call("signDoc", docId, name));
+  // The Save button saves the whole form; checkboxes that save right away pass just their own field.
+  const save = async (patch) => {
+    const s = await run("save", () => call("saveStep", stepId, patch || form), { explicit: !patch });
+    if (s && !patch) setSaved(true);
+    return s;
+  };
+  // Signing on the Business & tax screen saves the legal name first, so the signature can match it.
+  const sign = (docId, name) => run(`sign-${docId}`, async () => {
+    if (stepId === "business" && !(app && app.locked)) await call("saveStep", "business", form);
+    return call("signDoc", docId, name);
+  });
   const step = app && stepId ? app.steps.find((s) => s.id === stepId) : null;
-  return { app, setApp: (s) => take(s, false), form, set, setForm, err, setErr, busy, run, save, sign, load, step, call };
+  return { app, setApp: (s) => take(s, false), saved, form, set, setForm, err, setErr, busy, run, save, sign, load, step, call };
 }
 
 // Header, what's still needed, and the save button for one step.
-export function StepScreen({ title, app, step, err, children, onSave, saving, saveLabel = "Save", testID }) {
+export function StepScreen({ title, app, step, err, children, onSave, saving, saved, saveLabel = "Save", testID }) {
   const router = useRouter();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/home"));
   const fieldErrs = err && err.fields ? Object.values(err.fields).filter(Boolean) : [];
@@ -65,6 +86,7 @@ export function StepScreen({ title, app, step, err, children, onSave, saving, sa
           ) : step ? (
             <View style={[card, { borderColor: p.ok, backgroundColor: p.okSoft }]} testID="step-done"><Text style={[body, { color: p.ok, fontFamily: fonts.bodyB }]}>✓ This step is complete</Text></View>
           ) : null}
+          {saved && step && !step.done ? <Notice>Saved. Finish the items under "Still needed" above, then tap Save again.</Notice> : null}
           {err && !fieldErrs.length ? <Notice tone="bad">{err.message}</Notice> : null}
           {fieldErrs.length ? <Notice tone="bad">{fieldErrs.join(" ")}</Notice> : null}
           {onSave && !app.locked ? <Button title={saveLabel} onPress={onSave} loading={saving} testID={testID || "step-save"} /> : null}

@@ -12,7 +12,7 @@ export default function Skills() {
   const { app, form, set, err, busy } = a;
   const up = (kind, title, hint) => <Upload kind={kind} title={title} hint={hint} app={app} locked={app.locked} onUploaded={a.setApp} />;
   return (
-    <StepScreen title="Experience & certifications" app={app} step={a.step} err={err} onSave={() => a.save()} saving={busy === "save"}>
+    <StepScreen title="Experience & certifications" app={app} step={a.step} err={err} onSave={() => a.save()} saving={busy === "save"} saved={a.saved}>
       {app ? (
         <>
           <Section title="Experience">

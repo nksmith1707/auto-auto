@@ -16,7 +16,7 @@ export default function Safety() {
   const a = useApplication("safety");
   const { app, form, set, err, busy } = a;
   return (
-    <StepScreen title="Safety standards" app={app} step={a.step} err={err} onSave={() => a.save()} saving={busy === "save"}>
+    <StepScreen title="Safety standards" app={app} step={a.step} err={err} onSave={() => a.save()} saving={busy === "save"} saved={a.saved}>
       {app ? (
         <>
           <Text style={muted}>Auto-Auto doesn't tell you which tools or brands to use. These are the minimum safety standards every partner meets.</Text>

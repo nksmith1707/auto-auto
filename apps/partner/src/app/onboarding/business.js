@@ -10,7 +10,7 @@ export default function Business() {
   const locked = app && app.locked;
   const esigned = !!(app && app.signatures.esign);
   return (
-    <StepScreen title="Business & tax" app={app} step={a.step} err={err} onSave={() => a.save()} saving={busy === "save"}>
+    <StepScreen title="Business & tax" app={app} step={a.step} err={err} onSave={() => a.save()} saving={busy === "save"} saved={a.saved}>
       {app ? (
         <>
           <Section title="Your legal name">
