@@ -88,10 +88,21 @@ export function createFakeStripe({ checkoutBase = "https://checkout.stripe.test"
       st.refunds.push(r);
       return { status: 200, body: r };
     }
-    if (method === "POST" && path === "/v1/accounts") {
-      const a = { id: id("acct"), email: p.email, type: p.type, payouts_enabled: false, details_submitted: false };
+    // Like the real Stripe now: new Connect platforms must create accounts with Accounts v2.
+    if (method === "POST" && path === "/v1/accounts") return err(400, "invalid_request_error", "v1_accounts_unsupported", "Stripe no longer recommends Accounts v1 for new Connect integrations. Create connected accounts with POST /v2/core/accounts instead.");
+    if (method === "POST" && path === "/v2/core/accounts") {
+      const rec = p.configuration && p.configuration.recipient && p.configuration.recipient.capabilities && p.configuration.recipient.capabilities.stripe_balance;
+      if (!rec || !rec.stripe_transfers || rec.stripe_transfers.requested !== true) return err(400, "invalid_request_error", "parameter_missing", "Request the stripe_transfers capability");
+      const resp = p.defaults && p.defaults.responsibilities;
+      if (!["express", "none"].includes(p.dashboard) || !resp || resp.losses_collector !== "application" || resp.fees_collector !== "application") return err(400, "invalid_request_error", "invalid_combination", "Recipient-only accounts need dashboard express/none and application responsibilities");
+      const a = { id: id("acct"), object: "v2.core.account", email: p.contact_email, display_name: p.display_name, payouts_enabled: false, details_submitted: false };
       st.accounts[a.id] = a;
       return { status: 200, body: a };
+    }
+    if (method === "POST" && path === "/v2/core/account_links") {
+      const ob = p.use_case && p.use_case.account_onboarding;
+      if (!st.accounts[p.account] || !p.use_case || p.use_case.type !== "account_onboarding" || !ob || !ob.return_url || !ob.refresh_url) return err(400, "invalid_request_error", "parameter_missing", "bad account link");
+      return { status: 200, body: { object: "v2.core.account_link", url: `${checkoutBase}/onboard/${p.account}?return=${encodeURIComponent(ob.return_url)}`, use_case: p.use_case } };
     }
     if (method === "GET" && (m = path.match(/^\/v1\/accounts\/([^/]+)$/))) {
       const a = st.accounts[m[1]];
@@ -149,7 +160,8 @@ export function createFakeStripe({ checkoutBase = "https://checkout.stripe.test"
     handle,
     async fetch(url, opts = {}) {
       const u = new URL(url);
-      const params = opts.method === "GET" ? parseForm(u.search.slice(1)) : parseForm(opts.body);
+      const json = opts.headers && String(opts.headers["Content-Type"] || "").includes("json");
+      const params = opts.method === "GET" ? parseForm(u.search.slice(1)) : json ? JSON.parse(opts.body || "{}") : parseForm(opts.body);
       const r = handle(opts.method || "GET", u.pathname, params, opts.headers && opts.headers["Idempotency-Key"]);
       return { status: r.status, json: async () => JSON.parse(JSON.stringify(r.body)) };
     },

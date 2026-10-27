@@ -377,7 +377,7 @@ export function createPayments({ db, stripe, settings, now = () => Date.now(), l
       need();
       let acct = await db.get(`SELECT * FROM payout_accounts WHERE user_id = $1`, [user.id]);
       if (!acct) {
-        const a = await stripe.createAccount({ email: user.email, business_type: "individual", metadata: { user_id: user.id } });
+        const a = await stripe.createAccount({ email: user.email, name: `${user.first_name} ${user.last_name}`, metadata: { user_id: user.id } });
         await db.run(`INSERT INTO payout_accounts (user_id, stripe_account_id, updated_at) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO NOTHING`, [user.id, a.id, now()]);
         acct = await db.get(`SELECT * FROM payout_accounts WHERE user_id = $1`, [user.id]);
       }

@@ -35,13 +35,18 @@ export function cardMessage(e) {
   return "We couldn't reach our payment processor. Try again in a minute.";
 }
 
+// Version for Stripe's v2 endpoints (Accounts v2, required for new Connect platforms).
+export const V2_VERSION = "2026-09-30.endive";
+
 export function createStripe({ secretKey, fetchImpl = globalThis.fetch, baseUrl = "https://api.stripe.com", timeoutMs = 20_000 }) {
   if (!secretKey) return null;
-  async function req(method, path, params, { idempotencyKey, query } = {}) {
-    const headers = { Authorization: `Bearer ${secretKey}`, "Stripe-Version": "2024-06-20" };
+  // Stripe's v1 API takes form bodies; the v2 API (connected accounts) takes JSON and a newer version header.
+  async function req(method, path, params, { idempotencyKey, query, v2 = false } = {}) {
+    const headers = { Authorization: `Bearer ${secretKey}`, "Stripe-Version": v2 ? V2_VERSION : "2024-06-20" };
     let url = baseUrl + path;
     let body;
     if (method === "GET") { const q = formEncode(query || params || {}); if (q) url += `?${q}`; }
+    else if (v2) { body = JSON.stringify(params || {}); headers["Content-Type"] = "application/json"; }
     else { body = formEncode(params || {}); headers["Content-Type"] = "application/x-www-form-urlencoded"; }
     if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
     const ctrl = new AbortController();
@@ -73,9 +78,19 @@ export function createStripe({ secretKey, fetchImpl = globalThis.fetch, baseUrl 
     cancelPaymentIntent: (id) => req("POST", `/v1/payment_intents/${encodeURIComponent(id)}/cancel`, {}),
     refund: (p, idempotencyKey) => req("POST", "/v1/refunds", p, { idempotencyKey }),
     // Partner payouts (Connect Express).
-    createAccount: (p) => req("POST", "/v1/accounts", { type: "express", country: "US", capabilities: { transfers: { requested: true } }, ...p }),
+    // Partner payout accounts use Accounts v2 ("recipient": receives transfers and pays out to their bank).
+    // Stripe accepts v2 account IDs on v1 endpoints too, so status checks and transfers stay on v1.
+    createAccount: ({ email, name, metadata }) => req("POST", "/v2/core/accounts", {
+      contact_email: email, display_name: name, dashboard: "express",
+      identity: { country: "us", entity_type: "individual" },
+      defaults: { currency: "usd", responsibilities: { fees_collector: "application", losses_collector: "application" } },
+      configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true }, payouts: { requested: true } } } } },
+      metadata,
+    }, { v2: true }),
     getAccount: (id) => req("GET", `/v1/accounts/${encodeURIComponent(id)}`),
-    accountLink: (p) => req("POST", "/v1/account_links", { type: "account_onboarding", ...p }),
+    accountLink: ({ account, refresh_url, return_url }) => req("POST", "/v2/core/account_links", {
+      account, use_case: { type: "account_onboarding", account_onboarding: { configurations: ["recipient"], refresh_url, return_url } },
+    }, { v2: true }),
     loginLink: (id) => req("POST", `/v1/accounts/${encodeURIComponent(id)}/login_links`, {}),
     transfer: (p, idempotencyKey) => req("POST", "/v1/transfers", { currency: "usd", ...p }, { idempotencyKey }),
     // Partner ID checks (Stripe Identity): license photo plus a matching selfie, on Stripe's page.

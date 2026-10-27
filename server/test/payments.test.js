@@ -232,7 +232,7 @@ test("without Stripe nothing is charged, but partner earnings are still recorded
 
 test("when Stripe refuses (like Connect not turned on), the app gets Stripe's reason in test mode", async () => {
   const fs = createFakeStripe();
-  const off = await startTestApp({ STRIPE_SECRET_KEY: "sk_test_fake" }, { stripeFetch: async (url, opts) => (url.endsWith("/v1/accounts")
+  const off = await startTestApp({ STRIPE_SECRET_KEY: "sk_test_fake" }, { stripeFetch: async (url, opts) => (url.endsWith("/v2/core/accounts")
     ? { status: 400, json: async () => ({ error: { type: "invalid_request_error", message: "You can only create new accounts if you've signed up for Connect." } }) }
     : fs.fetch(url, opts)) });
   try {
