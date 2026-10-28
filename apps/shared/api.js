@@ -76,7 +76,6 @@ export function createApi({ baseUrl = DEFAULT_API_URL, fetchImpl = globalThis.fe
     updatePlace: (token, id, p) => request("PATCH", `/v1/places/${encodeURIComponent(id)}`, { token, body: p }),
     removePlace: (token, id) => request("DELETE", `/v1/places/${encodeURIComponent(id)}`, { token }),
 
-    pricingSettings: (token) => request("GET", "/v1/pricing/settings", { token }),
     priceMenu: (token, q) => request("GET", `/v1/pricing/menu?${new URLSearchParams(Object.entries(q || {}).filter(([, v]) => v != null && v !== "")).toString()}`, { token }),
     quote: (token, body) => request("POST", "/v1/quotes", { token, body }),
 

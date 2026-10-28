@@ -82,6 +82,8 @@ export function createAdmin({ db, jobs, photos, payments, notify = null, now = (
         fleetsInReview: await n(`SELECT COUNT(*) AS n FROM fleets WHERE status = 'review'`),
         fleetInvoicesPastDue: await n(`SELECT COUNT(*) AS n FROM fleet_invoices WHERE status = 'open' AND due_at < $1`, [now()]),
         fleetRunsWaiting: await n(`SELECT COUNT(*) AS n FROM fleet_runs WHERE status = 'posted' AND window_start - 86400000 <= $1`, [now()]),
+        // Proof or certificates uploaded by approved partners (for example to add brake or glass work).
+        docsToReview: await n(`SELECT COUNT(*) AS n FROM partner_documents d JOIN partner_profiles p ON p.user_id = d.user_id WHERE d.status = 'pending' AND d.replaced_at IS NULL AND p.status IN ('active', 'paused')`),
         claimsOpen: await n(`SELECT COUNT(*) AS n FROM claims WHERE status <> 'closed'`),
         claimsReady: await n(`SELECT COUNT(*) AS n FROM claims WHERE status = 'review'`),
         warrantyOpen: await n(`SELECT COUNT(*) AS n FROM jobs WHERE comeback_of IS NOT NULL AND status IN ('requested','awaiting_approval','confirmed','en_route','arrived','in_progress')`),

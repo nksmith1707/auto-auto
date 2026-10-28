@@ -20,7 +20,7 @@ function Toggle({ on }) {
 
 export default function Services() {
   const router = useRouter();
-  const { call, refresh } = useAuth();
+  const { call, refresh, user } = useAuth();
   const [catalog, setCatalog] = useState(null);
   const [chosen, setChosen] = useState(new Set());
   const [busy, setBusy] = useState(false);
@@ -28,9 +28,13 @@ export default function Services() {
   const back = () => (router.canGoBack() ? router.back() : router.replace("/home"));
 
   const [pay, setPay] = useState({});
+  const [waiting, setWaiting] = useState([]);
+  const [savedNote, setSavedNote] = useState(false);
+  const approved = user && user.partner && user.partner.status !== "applicant";
   useEffect(() => {
-    call("partnerServices").then(({ services, catalog: c }) => {
+    call("partnerServices").then(({ services, catalog: c, waitingForProof }) => {
       setCatalog(c);
+      setWaiting(waitingForProof || []);
       setChosen(new Set(services.map((s) => s.id)));
     }).catch((e) => setErr(e.message));
     // What each job pays on a typical car, from the pricing engine. Not essential, so errors are ignored.
@@ -47,8 +51,10 @@ export default function Services() {
     setErr(null);
     setBusy(true);
     try {
-      await call("savePartnerServices", [...chosen]);
+      const r = await call("savePartnerServices", [...chosen]);
       await refresh().catch(() => {});
+      // Approved partners who switched on a service that needs proof stay here to see what to upload.
+      if (approved && r.waitingForProof && r.waitingForProof.length) { setWaiting(r.waitingForProof); setSavedNote(true); setBusy(false); return; }
       back();
     } catch (e) {
       setErr(e.message);
@@ -87,7 +93,12 @@ export default function Services() {
                       ) : pay[s.id] && pay[s.id].fleetOnly ? (
                         <Text style={{ fontFamily: fonts.body, fontSize: 12, color: p.muted }}>Priced per fleet vehicle</Text>
                       ) : null}
-                      {s.needsProof ? <Text style={{ fontFamily: fonts.bodyB, fontSize: 11, color: p.money }}>Needs proof on file</Text> : null}
+                      {s.needsProof ? (
+                        approved && on && waiting.some((w) => w.serviceId === s.id)
+                          ? <Text style={{ fontFamily: fonts.bodyB, fontSize: 11, color: p.bad }} testID={`svc-waiting-${s.id}`}>Waiting for your proof to be approved</Text>
+                          : approved && on ? <Text style={{ fontFamily: fonts.bodyB, fontSize: 11, color: p.ok }}>Proof approved</Text>
+                            : <Text style={{ fontFamily: fonts.bodyB, fontSize: 11, color: p.money }}>Needs proof on file</Text>
+                      ) : null}
                     </View>
                     <Toggle on={on} />
                   </Pressable>
@@ -95,7 +106,14 @@ export default function Services() {
               })}
             </View>
           ))}
-          {proofCount ? (
+          {approved && waiting.length ? (
+            <View style={{ backgroundColor: p.moneySoft, borderRadius: 14, padding: 12, gap: 8 }} testID="proof-waiting">
+              <Text style={{ fontFamily: fonts.bodyB, fontSize: 14, color: p.ink }}>{savedNote ? "Saved. " : ""}You won't get these jobs until we approve your proof:</Text>
+              {waiting.map((w) => <Text key={w.serviceId} style={{ fontFamily: fonts.body, fontSize: 13, color: p.ink }}>• {w.name}: {w.needs.join(" and ")}</Text>)}
+              <Button title="Upload proof" variant="money" onPress={() => router.push("/onboarding/skills")} testID="upload-proof" />
+              {savedNote ? <Button title="Done" variant="ghost" onPress={back} /> : null}
+            </View>
+          ) : !approved && proofCount ? (
             <Notice style={{ backgroundColor: p.moneySoft, borderColor: "transparent" }}>
               <Text style={{ fontFamily: fonts.body, fontSize: 13, lineHeight: 19, color: p.ink }}>
                 {proofCount === 1 ? "One service you picked needs" : `${proofCount} services you picked need`} proof on file (certification, insurance, or water containment for washing). You'll upload it later in your application. Until then you won't get those jobs.

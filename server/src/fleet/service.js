@@ -2,6 +2,7 @@
 // fleet-program partners claim, per-vehicle proof of work and maintenance logs, add-ons with an auto-approve
 // limit, and one invoice per visit (net 30 after a credit check, or the card on file).
 import { HttpError } from "../lib/http.js";
+import { approvedProof, missingProof } from "../onboarding/proof.js";
 import { newId } from "../auth/tokens.js";
 import { US_STATES } from "../lib/validate.js";
 import { serviceById, SERVICES } from "../catalog/services.js";
@@ -206,6 +207,8 @@ export function createFleet({ db, settings, payments = null, photos = null, onbo
     const needed = new Set();
     for (const rv of await db.all(`SELECT lines FROM fleet_run_vehicles WHERE run_id = $1`, [run.id])) for (const l of J(rv.lines, [])) needed.add(l.serviceId);
     if (![...needed].every((x) => offered.has(x))) return false;
+    // DOT, brake, glass, and wash work only once the partner's proof is approved.
+    if (missingProof(await approvedProof(db, user.id), [...needed]).length) return false;
     if (f.lat == null) return true;
     const area = await db.get(`SELECT * FROM partner_service_areas WHERE user_id = $1`, [user.id]);
     if (!area || area.lat == null) return false;

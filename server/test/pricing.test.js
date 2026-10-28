@@ -126,7 +126,9 @@ before(async () => {
 after(async () => { await app.close(); });
 
 test("live settings start at version 1 with the design-phase numbers", async () => {
-  const r = await app.call("GET", "/v1/pricing/settings", { token: part });
+  assert.equal((await app.call("GET", "/v1/pricing/settings", { token: part })).status, 403, "partners can't see internal settings");
+  assert.equal((await app.call("GET", "/v1/pricing/settings", { token: cust })).status, 403, "customers can't either");
+  const r = await app.call("GET", "/v1/pricing/settings", { token: admin });
   assert.equal(r.status, 200);
   assert.equal(r.body.version, 1);
   assert.equal(r.body.settings.labor, 100);

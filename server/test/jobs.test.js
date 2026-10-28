@@ -1,6 +1,6 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { startTestApp, customer, partner } from "./helpers.js";
+import { startTestApp, customer, partner, approveProof } from "./helpers.js";
 
 const MIN = 60_000, HOUR = 60 * MIN, DAY = 24 * HOUR;
 let clock = Date.parse("2026-11-02T13:00:00Z");
@@ -31,6 +31,7 @@ before(async () => {
   for (const [t, id] of [[pa, a.body.user.id], [pb, b.body.user.id]]) {
     await ok("POST", `/v1/admin/partners/${id}/status`, admin, { status: "active" });
     await ok("PUT", "/v1/partner/services", t, { serviceIds: ["oil_change", "tire_rotation", "brakes", "air_filters", "jump_start", "glass_windshield", "diagnostics"] });
+    await approveProof(app.db, id);
   }
   await ok("PUT", "/v1/partner/services", pc, { serviceIds: ["oil_change"] });
   vehicleId = (await ok("POST", "/v1/vehicles", cust, { year: 2015, make: "Honda", model: "Civic", mileage: 84000 }, 201)).vehicle.id;
@@ -348,4 +349,32 @@ test("staff set partner status; pausing needs a reason; only staff can", async (
   await ok("POST", `/v1/admin/partners/${id}/status`, admin, { status: "paused", reason: "Insurance expired" });
   assert.match((await ok("GET", "/v1/jobs/board", pc)).blocked, /paused/);
   assert.equal((await call("GET", "/v1/admin/partners", cust)).status, 403);
+});
+
+test("brake, glass, DOT, and wash jobs only go to partners whose proof is approved, even after approval", async () => {
+  const d = await call("POST", "/v1/auth/signup", null, partner({ email: "pd@example.com", firstName: "Dana", lastName: "Ruiz" }));
+  const pd = d.body.token;
+  await ok("POST", `/v1/admin/partners/${d.body.user.id}/status`, admin, { status: "active" });
+  const saved = await ok("PUT", "/v1/partner/services", pd, { serviceIds: ["oil_change", "brakes", "glass_windshield"] });
+  assert.deepEqual(saved.waitingForProof.map((x) => x.serviceId).sort(), ["brakes", "glass_windshield"]);
+  assert.deepEqual(saved.waitingForProof.find((x) => x.serviceId === "brakes").needs, ["ASE certificate or brake-work proof"]);
+
+  const job = await book({ serviceIds: ["brakes"] });
+  const oil = await book({ serviceIds: ["oil_change"] });
+  const board = (await ok("GET", "/v1/jobs/board", pd)).jobs.map((j) => j.id);
+  assert.ok(board.includes(oil.id), "jobs without proof requirements still show");
+  assert.ok(!board.includes(job.id), "brake jobs wait for approved proof");
+  const r = await call("POST", `/v1/jobs/${job.id}/accept`, pd);
+  assert.equal(r.status, 409);
+  assert.match(r.body.error.message, /once your proof is approved/);
+
+  // A pending upload doesn't count; an approved one does.
+  await app.db.run(`INSERT INTO partner_documents (id, user_id, kind, filename, content_type, size_bytes, data, status, created_at) VALUES ('pd-ase', $1, 'ase', 'ase.pdf', 'application/pdf', 4, 'JVBERg==', 'pending', $2)`, [d.body.user.id, clock]);
+  assert.ok(!(await ok("GET", "/v1/jobs/board", pd)).jobs.some((j) => j.id === job.id));
+  await app.db.run(`UPDATE partner_documents SET status = 'approved' WHERE id = 'pd-ase'`);
+  assert.ok((await ok("GET", "/v1/jobs/board", pd)).jobs.some((j) => j.id === job.id));
+  assert.deepEqual((await ok("GET", "/v1/partner/services", pd)).waitingForProof.map((x) => x.serviceId), ["glass_windshield"]);
+  await ok("POST", `/v1/jobs/${job.id}/accept`, pd);
+  await ok("POST", `/v1/jobs/${job.id}/cancel`, cust, {});
+  await ok("POST", `/v1/jobs/${oil.id}/cancel`, cust, {});
 });

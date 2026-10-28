@@ -8,6 +8,7 @@ import { priceLine, customerTotal, partnerPay, glassQuote, PricingError } from "
 import { vehicleOut, placeArea } from "../profiles/routes.js";
 import { milesBetween, driveMinutes, addressLine, maskContacts } from "../maps/geo.js";
 import { ratingSummary } from "../care/summary.js";
+import { approvedProof, missingProof } from "../onboarding/proof.js";
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -122,6 +123,8 @@ export function createJobs({ db, settings, geocode = null, payments = null, onbo
       if (excluded.has(r.id) || r.id === job.customer_id) continue;
       const has = offered.get(r.id);
       if (!has || !need.every((x) => has.has(x))) continue;
+      // Brake, glass, DOT, and wash jobs only go to partners whose proof is approved.
+      if (missingProof(await approvedProof(t, r.id), need).length) continue;
       const d = reach(job, r, s);
       if (d === false) continue;
       if (onboarding && (await onboarding.coverageProblem(r.id))) continue; // Insurance lapsed: no offers until renewed.
@@ -528,6 +531,8 @@ export function createJobs({ db, settings, geocode = null, payments = null, onbo
       const lapsed = onboarding && (await onboarding.coverageProblem(user.id));
       if (lapsed) return { jobs: [], blocked: lapsed };
       const offered = new Set((await db.all(`SELECT service_id FROM partner_services WHERE user_id = $1`, [user.id])).map((r) => r.service_id));
+      // Services still waiting for approved proof don't count yet.
+      for (const id of missingProof(await approvedProof(db, user.id), [...offered])) offered.delete(id);
       const area = await db.get(`SELECT * FROM partner_service_areas WHERE user_id = $1`, [user.id]);
       // Only jobs open to everyone in range (instant jobs reach the board after one-at-a-time offers).
       const rows = await db.all(`SELECT * FROM jobs WHERE status = 'requested' AND dispatch_phase = 'board' AND request_expires_at > $1 ORDER BY priority DESC, CASE kind WHEN 'roadside' THEN 0 WHEN 'asap' THEN 1 ELSE 2 END, window_start LIMIT 300`, [now()]);
@@ -575,6 +580,8 @@ export function createJobs({ db, settings, geocode = null, payments = null, onbo
         const offered = new Set((await t.all(`SELECT service_id FROM partner_services WHERE user_id = $1`, [user.id])).map((r) => r.service_id));
         const missing = warrantyMine ? [] : J(job.service_ids, []).filter((x) => !offered.has(x));
         if (missing.length) throw conflict(`You don't offer ${missing.map((x) => serviceById(x).name).join(", ")}. Turn it on in Services first.`);
+        const noProof = warrantyMine ? [] : missingProof(await approvedProof(t, user.id), J(job.service_ids, []));
+        if (noProof.length) throw conflict(`You can take ${noProof.map((x) => serviceById(x).name).join(", ")} jobs once your proof is approved. Upload it under Experience & certifications.`);
         const s = await settingsFor(job.settings_version);
         const at = now();
         const myOffer = await t.get(`SELECT * FROM job_offers WHERE job_id = $1 AND partner_id = $2 AND status = 'pending' AND expires_at > $3`, [job.id, user.id, at]);

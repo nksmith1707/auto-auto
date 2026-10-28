@@ -1,5 +1,7 @@
 // Step 4: profile edits, customer vehicles and saved places, partner service area and services.
 import { readJson, send, HttpError } from "../lib/http.js";
+import { approvedProof, missingProof, PROOF_FOR } from "../onboarding/proof.js";
+import { DOC_KINDS } from "../onboarding/service.js";
 import { checker } from "../lib/validate.js";
 import { createLimiter } from "../lib/ratelimit.js";
 import { requireUser } from "../auth/routes.js";
@@ -337,9 +339,16 @@ export function profileRoutes(router, { db, auth, vinDecode, geocode = null, now
     return rows.map((r) => serviceById(r.service_id)).filter(Boolean).map(publicService);
   }
 
+  // Services switched on that won't get jobs until staff approve the partner's proof.
+  async function waitingForProof(userId) {
+    const ids = (await db.all(`SELECT service_id FROM partner_services WHERE user_id = $1`, [userId])).map((r) => r.service_id);
+    const kinds = await approvedProof(db, userId);
+    return missingProof(kinds, ids).map((id) => ({ serviceId: id, name: (serviceById(id) || {}).name, needs: PROOF_FOR[id].filter((k) => !kinds.has(k)).map((k) => DOC_KINDS[k]) }));
+  }
+
   router.get("/v1/partner/services", async (req, res) => {
     const s = await requireUser(req, auth, ["partner"]);
-    send(res, 200, { services: await partnerServices(s.user.id), catalog: { categories: CATEGORIES, services: SERVICES.map(publicService) } });
+    send(res, 200, { services: await partnerServices(s.user.id), waitingForProof: await waitingForProof(s.user.id), catalog: { categories: CATEGORIES, services: SERVICES.map(publicService) } });
   });
 
   router.put("/v1/partner/services", async (req, res) => {
@@ -357,6 +366,6 @@ export function profileRoutes(router, { db, auth, vinDecode, geocode = null, now
       const at = now();
       for (const id of unique) await t.run(`INSERT INTO partner_services (user_id, service_id, created_at) VALUES ($1, $2, $3)`, [s.user.id, id, at]);
     });
-    send(res, 200, { services: await partnerServices(s.user.id) });
+    send(res, 200, { services: await partnerServices(s.user.id), waitingForProof: await waitingForProof(s.user.id) });
   });
 }

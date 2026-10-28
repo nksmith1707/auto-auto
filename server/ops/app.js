@@ -180,6 +180,7 @@ V.overview = async () => {
     [o.fleetRunsWaiting, "bad", `${o.fleetRunsWaiting} fleet visit${o.fleetRunsWaiting === 1 ? "" : "s"} within 24 hours with no partner yet`, "fleet|runs"],
     [o.fleetInvoicesPastDue, "warn", `${o.fleetInvoicesPastDue} fleet invoice${o.fleetInvoicesPastDue === 1 ? "" : "s"} past due`, "fleet|invoices"],
     [o.payoutsFailed, "bad", `${o.payoutsFailed} payout${o.payoutsFailed === 1 ? "" : "s"} failed this week`, "payouts"],
+    [o.docsToReview, "brand", `${o.docsToReview} document${o.docsToReview === 1 ? "" : "s"} from approved partners waiting for review (proof for new services or renewed insurance)`, "apps|all"],
     [o.claimsReady, "bad", `${o.claimsReady} damage claim${o.claimsReady === 1 ? " is" : "s are"} ready for a decision`, "claims|claims"],
     [o.claimsOpen - o.claimsReady, "warn", `${o.claimsOpen - o.claimsReady} claim${o.claimsOpen - o.claimsReady === 1 ? " is" : "s are"} waiting for the partner's response`, "claims|claims"],
     [o.warrantyOpen, "brand", `${o.warrantyOpen} warranty return${o.warrantyOpen === 1 ? "" : "s"} open`, "claims|warranty"],

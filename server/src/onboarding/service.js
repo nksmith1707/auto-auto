@@ -3,6 +3,7 @@
 // Never stored: SSN/EIN and bank numbers (Stripe collects them), driver's license numbers and ID photos
 // (Stripe Identity checks them; we keep only whether it passed and whether the partner is 21 or older).
 import { HttpError } from "../lib/http.js";
+import { BRAKES, GLASS, DOT, WASH } from "./proof.js";
 import { newId } from "../auth/tokens.js";
 import { US_STATES } from "../lib/validate.js";
 import { AGREEMENT_IDS, documentById, documentOut } from "./documents.js";
@@ -71,10 +72,6 @@ const FIELDS = {
 const MIN_LIMITS = { glOccurrence: 1_000_000, glAggregate: 2_000_000, gkLimit: 100_000, autoLimit: 500_000 };
 const usd = (n) => `$${Number(n).toLocaleString("en-US")}`;
 const SAFETY = ["lift", "spill", "fire", "usedOil", "filters", "noStreet", "sober"];
-const BRAKES = ["brakes", "dot_brake"];
-const GLASS = ["glass_chip", "glass_windshield", "glass_side", "glass_back", "glass_adas"];
-const DOT = ["dot_annual", "dot_brake", "dot_dvir"];
-const WASH = ["exterior_wash", "full_detail", "fleet_wash"];
 
 const bad = (field, msg) => new HttpError(422, "invalid_input", "Some fields need fixing.", { fields: { [field]: msg } });
 const J = (s, d) => (s ? JSON.parse(s) : d);

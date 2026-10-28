@@ -35,3 +35,11 @@ export async function startTestApp(env = {}, opts = {}) {
 
 export const customer = (over = {}) => ({ role: "customer", email: "jordan@example.com", password: "Correct-Horse-42", firstName: "Jordan", lastName: "Reed", acceptTerms: true, ...over });
 export const partner = (over = {}) => ({ role: "partner", email: "amanda@example.com", password: "Wrench-Ready-2026", firstName: "Amanda", lastName: "Smith", phone: "(865) 555-0177", acceptTerms: true, ...over });
+
+// Marks a partner's proof as approved (what staff do in the Ops Console), so they get brake, glass, DOT, and wash jobs.
+export async function approveProof(db, userId, kinds = ["ase", "glass_cert", "dot_cert", "wash"]) {
+  for (const kind of kinds) {
+    await db.run(`INSERT INTO partner_documents (id, user_id, kind, filename, content_type, size_bytes, data, status, created_at) VALUES ($1, $2, $3, 'proof.pdf', 'application/pdf', 4, 'JVBERg==', 'approved', $4)`,
+      [`${userId}-${kind}`, userId, kind, Date.now()]);
+  }
+}

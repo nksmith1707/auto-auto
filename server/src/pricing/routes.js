@@ -30,8 +30,9 @@ export function pricingRoutes(router, { db, auth, settings }) {
     return make || model ? { make, model, year: Number(b.year) || null } : null;
   }
 
+  // Internal numbers (markups, platform fee, deductible): staff only. Apps get prices from the menu and quotes.
   router.get("/v1/pricing/settings", async (req, res) => {
-    await requireUser(req, auth);
+    await requireUser(req, auth, ["admin"]);
     const cur = await settings.current();
     send(res, 200, { version: cur.version, settings: cur.settings, meta: metaOut(), publishedAt: cur.createdAt });
   });
