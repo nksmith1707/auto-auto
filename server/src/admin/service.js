@@ -18,7 +18,8 @@ function startOfDayEastern(ms) {
   return ms - (((parts.hour % 24) * 60 + parts.minute) * 60 + parts.second) * 1000 - d.getMilliseconds();
 }
 
-export function createAdmin({ db, jobs, photos, payments, now = () => Date.now() }) {
+export function createAdmin({ db, jobs, photos, payments, notify = null, now = () => Date.now() }) {
+  let lastReminders = 0;
   const daysUntil = (date) => (date ? Math.floor((Date.parse(`${date}T12:00:00Z`) - now()) / DAY) : null);
 
   // Every policy on file with when it expires, for partners who chose their coverage.
@@ -81,7 +82,34 @@ export function createAdmin({ db, jobs, photos, payments, now = () => Date.now()
         fleetsInReview: await n(`SELECT COUNT(*) AS n FROM fleets WHERE status = 'review'`),
         fleetInvoicesPastDue: await n(`SELECT COUNT(*) AS n FROM fleet_invoices WHERE status = 'open' AND due_at < $1`, [now()]),
         fleetRunsWaiting: await n(`SELECT COUNT(*) AS n FROM fleet_runs WHERE status = 'posted' AND window_start - 86400000 <= $1`, [now()]),
+        claimsOpen: await n(`SELECT COUNT(*) AS n FROM claims WHERE status <> 'closed'`),
+        claimsReady: await n(`SELECT COUNT(*) AS n FROM claims WHERE status = 'review'`),
+        warrantyOpen: await n(`SELECT COUNT(*) AS n FROM jobs WHERE comeback_of IS NOT NULL AND status IN ('requested','awaiting_approval','confirmed','en_route','arrived','in_progress')`),
+        lowRatings: await n(`SELECT COUNT(*) AS n FROM ratings WHERE stars <= 2 AND followed_up_at IS NULL`),
+        notifyFailures: await n(`SELECT COUNT(*) AS n FROM notification_outbox WHERE status = 'failed' AND created_at >= $1`, [now() - 7 * DAY]),
+        notifyProviders: notify ? notify.providers() : null,
       };
+    },
+
+    // Reminders that go out on a schedule: insurance expiring in 30, 14, and 3 days, and the day it expires.
+    // Each one is sent once (the notification's dedupe key). Checked every 10 minutes.
+    async reminders() {
+      if (!notify || now() - lastReminders < 10 * 60_000) return 0;
+      lastReminders = now();
+      let sent = 0;
+      for (const p of await policies()) {
+        if (p.daysLeft == null || !["active", "paused"].includes(p.partnerStatus)) continue;
+        const mark = p.daysLeft < 0 ? "expired" : [3, 14, 30].find((d) => p.daysLeft <= d);
+        if (mark == null) continue;
+        const id = await notify.send(db, p.partnerId, {
+          category: "account", dedupe: `insurance:${p.policy}:${p.expires}:${mark}`,
+          title: mark === "expired" ? `${p.label} expired` : `${p.label} expires in ${p.daysLeft} day${p.daysLeft === 1 ? "" : "s"}`,
+          body: mark === "expired" ? "Jobs that need this policy are paused until you upload the renewed certificate." : `Upload the renewed certificate before ${p.expires} so your jobs don't pause.`,
+          data: { route: "/onboarding/insurance" },
+        });
+        if (id) sent++;
+      }
+      return sent;
     },
 
     async jobs({ filter = "open", q = "" } = {}) {

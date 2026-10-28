@@ -7,6 +7,10 @@ import { formatPhone, money } from "../../../shared/api";
 import { fmtLeft, fmtWindow } from "../../../shared/format";
 import { useAuth } from "../../../shared/session";
 import { Button, LinkButton, Notice } from "../../../shared/ui";
+import { Bell } from "../../../shared/Notifications";
+import { forgetPush, registerPush } from "../../../shared/push";
+
+let askedForPush = false;
 import { fonts, p } from "../theme";
 import { stepRoute } from "../components/steps";
 
@@ -54,7 +58,7 @@ function JobList({ title, jobs, empty, onOpen, board }) {
           <Text style={{ fontFamily: fonts.body, fontSize: 13, color: p.muted }}>
             {KIND[j.kind] ? `${KIND[j.kind]} · ` : ""}{j.kind === "scheduled" ? fmtWindow(j.windowStart, j.windowEnd) : `open ${fmtLeft(j.requestExpiresAt - Date.now())} more`} · {j.area}{j.distanceMiles != null ? ` · ${j.distanceMiles} mi` : ""}
           </Text>
-          <Text style={{ fontFamily: fonts.bodyB, fontSize: 12, color: board ? p.brandText : p.ok }}>{board ? `${j.vehicle.year} ${j.vehicle.make} ${j.vehicle.model}` : STATUS_TXT[j.status]}</Text>
+          <Text style={{ fontFamily: fonts.bodyB, fontSize: 12, color: j.warranty ? p.money : board ? p.brandText : p.ok }}>{j.warranty ? (j.warranty.original ? "Warranty return · your customer · " : "Warranty return · ") : ""}{board ? `${j.vehicle.year} ${j.vehicle.make} ${j.vehicle.model}` : STATUS_TXT[j.status]}</Text>
         </Pressable>
       ))}
     </View>
@@ -97,6 +101,8 @@ export default function Home() {
   const [application, setApplication] = useState(null);
   const loadApplication = useCallback(async () => { try { setApplication(await call("onboarding")); } catch { /* checklist waits for the next refresh */ } }, [call]);
   useFocusEffect(useCallback(() => { refresh().catch(() => {}); loadJobs(); loadApplication(); }, [refresh, loadJobs, loadApplication]));
+  // Once per launch: make sure this phone can get alerts (job offers last only 30 seconds).
+  useFocusEffect(useCallback(() => { if (!askedForPush) { askedForPush = true; registerPush(call).catch(() => {}); } }, [call]));
   const [confirmAll, setConfirmAll] = useState(false);
   const [busy, setBusy] = useState(null);
   const [err, setErr] = useState(null);
@@ -130,6 +136,7 @@ export default function Home() {
               <Text style={{ fontFamily: fonts.displayX, fontSize: 20, color: p.ink }} numberOfLines={1}>Hi, {user.firstName}</Text>
             </View>
             <View style={[styles.chip, { backgroundColor: chip.bg }]}><Text style={[styles.chipText, { color: chip.fg }]}>{st.label}</Text></View>
+            <Bell onPress={() => router.push("/notifications")} color={p.ink} />
           </View>
 
           {offline ? <Notice tone="bad" style={{ marginBottom: 14 }}>You're offline. Showing your saved account until the connection comes back.</Notice> : null}
@@ -166,7 +173,9 @@ export default function Home() {
                 <Step n={3} title="Payouts" sub="Balance, cash out, and where we send your money" done={!!user.partner.payoutsEnabled} onPress={() => router.push("/payouts")} testID="step-payouts" />
                 <Step n={4} title="Insurance & documents" sub="Renew certificates before they expire" done={false} onPress={() => router.push("/onboarding/insurance")} testID="step-insurance-active" />
                 <Step n={5} title="Fleet visits" sub="Several company vehicles in one trip, at a business yard" done={false} onPress={() => router.push("/fleet-runs")} testID="open-fleet-runs" />
-                <Step n={6} title="Report an incident" sub="Damage, injuries, or unsafe situations, within 24 hours" done={false} onPress={() => router.push("/incident")} testID="open-incident" />
+                <Step n={6} title="Ratings & reviews" sub="Your average, what customers say, and tips" done={false} onPress={() => router.push("/reviews")} testID="open-reviews" />
+                <Step n={7} title="Claims" sub="Damage reports about your jobs. Respond within 48 hours" done={false} onPress={() => router.push("/claims")} testID="open-claims" />
+                <Step n={8} title="Report an incident" sub="Damage, injuries, or unsafe situations, within 24 hours" done={false} onPress={() => router.push("/incident")} testID="open-incident" />
               </View>
             </View>
           ) : null}
@@ -208,7 +217,7 @@ export default function Home() {
 
           <View style={{ marginTop: "auto", paddingTop: 28, gap: 10 }}>
             {err ? <Notice tone="bad">{err}</Notice> : null}
-            <Button title="Log out" variant="ghost" onPress={() => run("one", signOut)} loading={busy === "one"} testID="sign-out" />
+            <Button title="Log out" variant="ghost" onPress={() => run("one", async () => { await forgetPush(call); await signOut(); })} loading={busy === "one"} testID="sign-out" />
             {confirmAll ? (
               <View style={{ gap: 10 }}>
                 <Text style={{ fontFamily: fonts.body, fontSize: 14, color: p.ink, textAlign: "center" }}>Log out on every phone and computer that's signed in to your account?</Text>

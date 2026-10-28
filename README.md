@@ -53,8 +53,8 @@ EXPO_PUBLIC_API_URL=http://192.168.1.20:3000 npx expo start --clear
 
 | App | Screens so far |
 |---|---|
-| Customer (`apps/customer`) | Splash, Log in / Sign up, Forgot password, Enter reset code, Home (vehicles, places, account), Add/edit vehicle with VIN decode, Prices for each vehicle with a visit estimate, Book a visit (ASAP or a 2-hour window), Your visits, Visit details (approve partner, approve add-ons and glass quotes, reschedule, cancel with fee preview, receipt, inspection report, warranty), Add/edit saved place, Payment cards (add on Stripe's page, choose default, remove), payment status on each visit with Pay now if a card is declined, visit photos, Service history for each vehicle, Edit your details, Business account (fleet sign-up, vehicles, visits, approvals, invoices, account), Fleet vehicle, Maintenance log, Request fleet service, Fleet visit, Invoice, Log out, Log out on all devices |
-| Partner (`apps/partner`) | Splash, Log in, Apply (create partner account), Forgot password, Enter reset code, Application checklist (10 steps: service area, services, business & tax, ID check with Stripe, background check disclosure and authorization, insurance with certificate uploads, experience & certifications, safety standards, payouts, agreements with e-signatures; then review & submit), Service area (home base + travel radius), Services you offer (with pay per job), Open jobs and Your jobs (approved partners), Job screen (accept, start trip, arrive, 12 check-in photos with damage notes, check in, add-ons, after photos, glass quote, inspection, complete, no-show, cancel), Payouts (Stripe setup, balance, activity, instant cash-out), Fleet visits (open and yours), Fleet visit (claim, start, per-vehicle work, finish), Fleet vehicle (check-in photos, odometer, add-ons, after photos, inspection, done or not serviced), Log out, Log out on all devices |
+| Customer (`apps/customer`) | Splash, Log in / Sign up, Forgot password, Enter reset code, Home (vehicles, places, account), Add/edit vehicle with VIN decode, Prices for each vehicle with a visit estimate, Book a visit (ASAP or a 2-hour window), Your visits, Visit details (approve partner, approve add-ons and glass quotes, reschedule, cancel with fee preview, receipt, inspection report, warranty), Add/edit saved place, Payment cards (add on Stripe's page, choose default, remove), payment status on each visit with Pay now if a card is declined, visit photos, Service history for each vehicle, Edit your details, Business account (fleet sign-up, vehicles, visits, approvals, invoices, account), Fleet vehicle, Maintenance log, Request fleet service, Fleet visit, Invoice, Notifications (inbox and settings), Rate & tip, Help & claims, Report damage, Claim, Warranty return, Log out, Log out on all devices |
+| Partner (`apps/partner`) | Splash, Log in, Apply (create partner account), Forgot password, Enter reset code, Application checklist (10 steps: service area, services, business & tax, ID check with Stripe, background check disclosure and authorization, insurance with certificate uploads, experience & certifications, safety standards, payouts, agreements with e-signatures; then review & submit), Service area (home base + travel radius), Services you offer (with pay per job), Open jobs and Your jobs (approved partners), Job screen (accept, start trip, arrive, 12 check-in photos with damage notes, check in, add-ons, after photos, glass quote, inspection, complete, no-show, cancel), Payouts (Stripe setup, balance, activity, instant cash-out), Fleet visits (open and yours), Fleet visit (claim, start, per-vehicle work, finish), Fleet vehicle (check-in photos, odometer, add-ons, after photos, inspection, done or not serviced), Notifications (inbox and settings), Ratings & reviews, Claims and claim response, warranty returns on the job screen, rate the customer, Log out, Log out on all devices |
 
 Notes:
 - Sessions are kept in the phone's secure storage (Keychain on iPhone, Keystore on Android), so people stay signed in until they log out or their session expires.
@@ -119,6 +119,20 @@ Sections: **Overview** (what needs attention), **Jobs** (live, waiting, partner 
 - **Billing:** one invoice per visit (INV-2001 and up). Card terms are charged when the visit is submitted; net 30 invoices are due in 30 days, and staff mark them paid in the Ops Console. Cancelling within 24 hours of a claimed visit bills the trip fee, which goes to the partner.
 - **Maintenance log:** every finished vehicle's mileage, services, inspection, notes, and photos.
 
+## Notifications, ratings, claims, and warranty (step 13)
+
+- **Inbox:** every update lands in the app's **Notifications** screen (the bell on the home screen). Each person picks phone alert, text, and email for each kind of update under **Notifications › Settings**.
+- **Texts (Twilio):** set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_FROM_NUMBER` (or `TWILIO_MESSAGING_SERVICE_SID`) in Render. Texts only go to people who turned them on and agreed (the consent wording is on the settings screen). The first text says how to stop; replying STOP turns texts off.
+- **Email (Resend or Postmark):** set `RESEND_API_KEY` or `POSTMARK_SERVER_TOKEN`, plus `EMAIL_FROM` (like `Auto-Auto <hello@yourdomain.com>`, on a domain you verified with the provider). Password reset codes use the same provider.
+- **Phone alerts:** sent through Expo's free push service; no key needed. They start working with the App Store and Google Play builds (step 14). `EXPO_ACCESS_TOKEN` is only needed if you turn on Expo's push security.
+- **Without keys:** nothing is sent; messages still show in the inbox, and the server log says what would have gone out. The Ops Console overview shows which providers are connected.
+- **Ratings and tips:** customers rate a visit for 14 days (stars, tags, review, private note, favorite partner) and tip for 24 hours. 100% of tips go to the partner. Partners rate customers privately. Partners see their average of the last 100 ratings; under 4.60 with 10+ ratings flags the account for review. 1–2 star ratings show in the Ops Console for a support follow-up.
+- **Favorites:** a customer's favorite partners get their instant job offers first.
+- **Damage claims:** customers report damage within 30 days, with photos. The partner has 48 hours to respond; that job's pay (and tip) is held until staff decide in the Ops Console (**Claims & warranty**). Outcomes: pay (Partner Protection: the partner owes the deductible; own insurance: their insurer pays, or Auto-Auto pays and recovers it), goodwill credit, or deny.
+- **Warranty returns:** a free return visit while the warranty is active (12 months / 12,000 miles). The original partner gets it first for up to 24 hours, with no pay. If they can't, it goes to everyone, the new partner is paid as usual, and the cost is charged back to the original partner (staff can waive it).
+- **Money partners owe** (deductibles, charge-backs) comes out of payouts, oldest first, never more than 25% of any one payout. Partners see it on Payouts; staff can waive it.
+- **Insurance reminders** go out 30, 14, and 3 days before a policy expires, and the day it does.
+
 ## Partner applications (onboarding)
 
 Partners finish 10 steps in the app, then submit. Each step shows what's still needed.
@@ -139,6 +153,8 @@ Partners finish 10 steps in the app, then submit. Each step shows what's still n
 2. Click **New → Blueprint**, pick the `auto-auto` repo, and click **Apply**.
 3. Wait for the first deploy to finish, then open the service's `.onrender.com` address followed by `/health`. You should see `{"ok":true}`.
 4. Every push to `main` redeploys. Database changes apply automatically when the server starts.
+
+Optional keys, added under the service's **Environment** tab (never in code or chat): `STRIPE_SECRET_KEY`, `GOOGLE_MAPS_API_KEY`, `PHOTO_URL_SECRET`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `RESEND_API_KEY` (or `POSTMARK_SERVER_TOKEN`), and `EMAIL_FROM`.
 
 The API runs anywhere that has Node 22 and Postgres. To use another host, set `DATABASE_URL`, `NODE_ENV=production`, and `TRUST_PROXY=true`, and run `npm install` then `npm start`.
 
@@ -225,6 +241,27 @@ All requests and responses are JSON. Signed-in requests send `Authorization: Bea
 | GET, POST | `/v1/jobs/:id/messages` | Customer and their partner: in-app chat (`body`). Phone numbers and emails are hidden |
 | GET | `/v1/admin/partners` | Staff: partners with status and review flags |
 | POST | `/v1/admin/partners/:id/status` | Staff: `status` (`active` approves), `reason` (required to pause) |
+| GET | `/v1/notifications` | The inbox (last 60) and the unread count |
+| POST | `/v1/notifications/read` | Mark `ids` read, or all of them |
+| GET, PUT | `/v1/notifications/settings` | Phone/text/email per kind of update (`categories`), and `smsOptIn` (needs a mobile number) |
+| POST | `/v1/push-tokens`, `/v1/push-tokens/remove` | Register or forget this phone for alerts (`token` from Expo, `platform`) |
+| POST | `/v1/jobs/:id/rating` | Customers: `stars`, `tags`, `serviceStars`, `review`, `privateNote`, `tipCents`, `favorite`. Once, within 14 days |
+| POST | `/v1/jobs/:id/tip` | Customers: `tipCents`, within 24 hours, once |
+| POST | `/v1/jobs/:id/rate-customer` | Partners: `stars`, private, within 7 days |
+| POST | `/v1/jobs/:id/warranty` | Customers: free warranty return. `issue`, `details`, `windowStart`, `placeId`, `photos` (up to 4) |
+| POST | `/v1/jobs/:id/decline-warranty` | Original partner: can't do the warranty return; it goes to other partners |
+| GET, POST | `/v1/claims` | Customers: their claims and the visits they can claim on, or a new claim (`jobId`, `damageTo`, `description`, `wants`, `estimate`, `photos` 1–6). Partners: claims about their jobs |
+| GET | `/v1/claims/:id` | One claim, as the customer or partner sees it |
+| POST | `/v1/claims/:id/respond` | Partners: `response`, within 48 hours |
+| GET | `/v1/partner/reviews` | Partners: average, spread, mentions, reviews, tips |
+| GET | `/v1/admin/claims`, `/v1/admin/claims/:id` | Staff: claims (`status=open|review|closed|all`), or one with everything |
+| POST | `/v1/admin/claims/:id/decision` | Staff: `outcome` (`pay`, `goodwill`, `deny`), `amount`, `paidBy`, `note` |
+| GET | `/v1/admin/warranty` | Staff: warranty returns |
+| POST | `/v1/admin/warranty/:id/charge-back` | Staff: `chargeBack` true or false |
+| GET | `/v1/admin/ratings` | Staff: `filter=low` (1–2 stars) or `all` |
+| POST | `/v1/admin/ratings/:id/follow-up`, `/v1/admin/ratings/:id/hide` | Staff: mark a low rating followed up, or hide a review's words (`reason`) |
+| GET | `/v1/admin/debts`, POST `/v1/admin/debts/:id/waive` | Staff: what partners owe; waive (`waive`) |
+| GET | `/v1/admin/notifications` | Staff: which providers are connected, and recent failures |
 
 Approve a partner from the command line (until the Ops Console has a button): `npm run partner-status -- partner@email.com active` in the server folder, or in the Render shell.
 

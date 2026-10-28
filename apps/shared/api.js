@@ -150,6 +150,25 @@ export function createApi({ baseUrl = DEFAULT_API_URL, fetchImpl = globalThis.fe
     fleetVehicleAction: (token, id, rv, action, body) => request("POST", `/v1/fleet-runs/${encodeURIComponent(id)}/vehicles/${encodeURIComponent(rv)}/${action}`, { token, body: body || {} }),
     fleetVehiclePhoto: (token, id, rv, body) => request("POST", `/v1/fleet-runs/${encodeURIComponent(id)}/vehicles/${encodeURIComponent(rv)}/photos`, { token, body, timeout: 120_000 }),
     fleetVehicleDamage: (token, id, rv, slot, note) => request("POST", `/v1/fleet-runs/${encodeURIComponent(id)}/vehicles/${encodeURIComponent(rv)}/photos/${encodeURIComponent(slot)}/damage`, { token, body: { note } }),
+
+    // Notifications: the inbox, settings, and phone alert registration.
+    notifications: (token) => request("GET", "/v1/notifications", { token }),
+    markRead: (token, ids) => request("POST", "/v1/notifications/read", { token, body: ids ? { ids } : {} }),
+    notificationSettings: (token) => request("GET", "/v1/notifications/settings", { token }),
+    saveNotificationSettings: (token, body) => request("PUT", "/v1/notifications/settings", { token, body }),
+    addPushToken: (token, pushToken, platform) => request("POST", "/v1/push-tokens", { token, body: { token: pushToken, platform } }),
+    removePushToken: (token, pushToken) => request("POST", "/v1/push-tokens/remove", { token, body: { token: pushToken } }),
+
+    // After the visit: ratings, tips, claims, and warranty returns.
+    rateJob: (token, id, body) => request("POST", `/v1/jobs/${encodeURIComponent(id)}/rating`, { token, body }),
+    tipJob: (token, id, tipCents) => request("POST", `/v1/jobs/${encodeURIComponent(id)}/tip`, { token, body: { tipCents } }),
+    requestWarranty: (token, id, body) => request("POST", `/v1/jobs/${encodeURIComponent(id)}/warranty`, { token, body, timeout: 120_000 }),
+    claims: (token) => request("GET", "/v1/claims", { token }),
+    claim: (token, id) => request("GET", `/v1/claims/${encodeURIComponent(id)}`, { token }),
+    fileClaim: (token, body) => request("POST", "/v1/claims", { token, body, timeout: 180_000 }),
+    respondClaim: (token, id, response) => request("POST", `/v1/claims/${encodeURIComponent(id)}/respond`, { token, body: { response } }),
+    rateCustomer: (token, id, stars) => request("POST", `/v1/jobs/${encodeURIComponent(id)}/rate-customer`, { token, body: { stars } }),
+    partnerReviews: (token) => request("GET", "/v1/partner/reviews", { token }),
   };
 }
 

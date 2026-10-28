@@ -97,7 +97,7 @@ test("first partner to accept gets it; the customer sees who", async () => {
   assert.equal(late.status, 409);
   assert.match(late.body.error.message, /already took/);
   const c = (await ok("GET", `/v1/jobs/${job.id}`, cust)).job;
-  assert.deepEqual(c.partner, { id: paId, name: "Amanda S.", jobsDone: 0 });
+  assert.deepEqual(c.partner, { id: paId, name: "Amanda S.", jobsDone: 0, rating: { average: null, count: 0 } });
   assert.equal((await call("GET", `/v1/jobs/${job.id}`, pb)).status, 404, "other partners can't see a taken job");
   assert.equal((await call("GET", `/v1/jobs/${job.id}`, cust2)).status, 404, "other customers can't see it");
   assert.equal((await call("POST", `/v1/jobs/${job.id}/accept`, pc)).status, 403, "applicants can't accept");

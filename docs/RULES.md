@@ -60,4 +60,4 @@ Decided during the design phase (Oct 2026). The prototypes in `/prototypes` show
 
 - Exact insurer and policy terms for Partner Protection (needs broker quotes).
 - Lawyer review of every agreement in the partner onboarding flow.
-- Email and text provider, maps provider, background-check provider, repair-data (book time) license.
+- Email and text provider (the app supports Twilio for texts and Resend or Postmark for email; pick one and add its keys), background-check provider, repair-data (book time) license.

@@ -1,6 +1,6 @@
 // One job from the partner's side: accept, start trip (address unlocks), arrive, check in, add-ons, glass quote, inspection, complete.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Image, Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { money } from "../../../shared/api";
 import { fmtLeft, fmtWhen, fmtWindow } from "../../../shared/format";
@@ -40,6 +40,16 @@ function Seg({ value, onChange, options }) {
           </Pressable>
         );
       })}
+    </View>
+  );
+}
+
+function WarrantyPhotos({ photos }) {
+  const { api } = useAuth();
+  if (!photos || !photos.length) return null;
+  return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+      {photos.map((x) => <Image key={x.id} source={{ uri: api.url(x.url) }} style={{ width: 72, height: 72, borderRadius: 10 }} accessibilityLabel="Customer photo" />)}
     </View>
   );
 }
@@ -110,6 +120,20 @@ export default function PartnerJob() {
           <Text style={{ fontFamily: fonts.bodyB, fontSize: 14, color: p.ink }}>{job.kind === "scheduled" ? fmtWindow(job.windowStart, job.windowEnd) : job.kind === "roadside" ? "Roadside · now" : "As soon as possible"}</Text>
         </View>
 
+        {job.warranty ? (
+          <Box accent style={{ borderColor: p.money }}>
+            <Label>Warranty return · {job.warranty.original ? "your customer" : "another partner's repair"}</Label>
+            <Text style={{ fontFamily: fonts.bodyB, fontSize: 15, color: p.ink }} testID="warranty-issue">{job.warranty.issueLabel}</Text>
+            {job.warranty.details ? <Text style={{ fontFamily: fonts.body, fontSize: 14, color: p.ink }}>"{job.warranty.details}"</Text> : null}
+            <WarrantyPhotos photos={job.warranty.photos} />
+            <Text style={{ fontFamily: fonts.body, fontSize: 13, color: p.muted }}>
+              {job.warranty.original
+                ? `Free for the customer. You fix it at no charge; defective parts go back to the supplier under their warranty.${job.warranty.offerUntil ? ` Accept by ${fmtWhen(job.warranty.offerUntil)}, or it goes to another partner and the cost is charged back to you.` : ""}`
+                : "Free for the customer. You're paid the usual amount for this work."}
+            </Text>
+          </Box>
+        ) : null}
+
         <Box>
           <Label>{job.place ? "Address" : "Area"}</Label>
           {job.place ? (
@@ -137,6 +161,7 @@ export default function PartnerJob() {
               <Line l="Mobile fee" r={money(pay.visitFeeCents, { always: true })} />
               {pay.topUpCents ? <Line l="Minimum visit top-up" r={money(pay.topUpCents, { always: true })} /> : null}
               <Line l="Your earnings" r={money(pay.earningsCents, { always: true })} strong color={p.money} />
+              {job.tipCents ? <Line l="Tip (100% yours)" r={money(job.tipCents, { always: true })} color={p.ok} /> : null}
               {pay.partsReimbursedCents ? <Line l="Parts reimbursed at cost (separate)" r={money(pay.partsReimbursedCents, { always: true })} /> : null}
             </View>
           ))}
@@ -147,7 +172,10 @@ export default function PartnerJob() {
 
         {s === "requested" ? (
           <View style={{ gap: 8 }}>
-            <Button title="Accept job" big onPress={() => go("accept")} loading={busy === "accept"} testID="accept-job" />
+            <Button title={job.warranty && job.warranty.original ? "Accept warranty return" : "Accept job"} big onPress={() => go("accept")} loading={busy === "accept"} testID="accept-job" />
+            {job.warranty && job.warranty.original && job.warranty.offerUntil ? (
+              <LinkButton title="I can't make it" onPress={() => act("decline-warranty", () => call("jobAction", job.id, "decline-warranty"), () => router.replace("/home"))} style={{ alignSelf: "center" }} textStyle={{ color: p.muted }} />
+            ) : null}
           </View>
         ) : null}
         {["confirmed", "en_route", "arrived", "in_progress"].includes(s) ? (
@@ -267,7 +295,32 @@ export default function PartnerJob() {
           </>
         ) : null}
 
-        {s === "completed" ? <Notice tone="ok">Done. Your earnings are added to your balance. See Payouts for when they're paid.</Notice> : null}
+        {s === "completed" ? <Notice tone="ok">{job.warranty && job.warranty.original ? "Warranty return done. Thanks for making it right." : "Done. Your earnings are added to your balance. See Payouts for when they're paid."}</Notice> : null}
+        {s === "completed" && job.rating ? (
+          <Box>
+            <Label>The customer's rating</Label>
+            <Text style={{ fontSize: 22, color: p.money }}>{"★".repeat(job.rating.stars)}{"☆".repeat(5 - job.rating.stars)}</Text>
+            {job.rating.review ? <Text style={{ fontFamily: fonts.body, fontSize: 14, color: p.ink }}>"{job.rating.review}"</Text> : null}
+          </Box>
+        ) : null}
+        {s === "completed" && !job.customerRated ? (
+          <Box>
+            <Label>How was {job.customer.name.split(" ")[0]}?</Label>
+            <View style={{ flexDirection: "row", justifyContent: "center", gap: 6 }} accessibilityRole="radiogroup" accessibilityLabel="Rate the customer">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <Pressable key={n} onPress={() => act("rate-customer", () => call("rateCustomer", job.id, n))} accessibilityRole="radio" accessibilityState={{ checked: false }} accessibilityLabel={`${n} stars`} testID={`cust-star-${n}`} hitSlop={4}>
+                  <Text style={{ fontSize: 34, color: p.line }}>★</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Text style={{ fontFamily: fonts.body, fontSize: 12, color: p.muted, textAlign: "center" }}>Private. Helps us match you with good customers.</Text>
+          </Box>
+        ) : null}
+        {(job.claims || []).map((c) => (
+          <Pressable key={c.id} onPress={() => router.push({ pathname: "/claim", params: { id: c.id } })} accessibilityRole="button">
+            <Notice tone={c.status === "closed" ? "info" : "bad"}>{`Damage claim ${c.number}: ${c.status === "partner" ? "respond within 48 hours" : c.status === "review" ? "being reviewed" : "decided"}. Only this job's pay is held while it's open. Tap to open.`}</Notice>
+          </Pressable>
+        ))}
         {s === "cancelled" ? <Notice>{job.cancelReason === "no_show" ? `No-show recorded. You keep ${money(job.partnerCompCents)}.` : job.partnerCompCents ? `The customer cancelled. You keep ${money(job.partnerCompCents)} of their fee.` : "This job was cancelled."}</Notice> : null}
 
         {["en_route", "arrived", "in_progress", "completed"].includes(s) ? (

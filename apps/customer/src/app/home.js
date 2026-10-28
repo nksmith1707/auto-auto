@@ -8,6 +8,10 @@ import { STATUS_LABEL, fmtWindow } from "../../../shared/format";
 import { EngineLogo } from "../../../shared/Logo";
 import { useAuth } from "../../../shared/session";
 import { Button, Card, LinkButton, Notice, Screen, T, useTheme } from "../../../shared/ui";
+import { Bell } from "../../../shared/Notifications";
+import { forgetPush, registerPush } from "../../../shared/push";
+
+let askedForPush = false;
 
 const FUEL = { gas: "Gas", diesel: "Diesel", hybrid: "Hybrid", electric: "Electric" };
 const PARK = { driveway: "Driveway", street: "Street parking", lot: "Parking lot", garage: "Garage", other: "Other" };
@@ -49,6 +53,8 @@ export default function Home() {
 
   // Reload whenever the screen comes back into view (after adding or editing).
   useFocusEffect(useCallback(() => { load(); }, [load]));
+  // Once per launch: make sure this phone can get alerts (asks permission the first time).
+  useFocusEffect(useCallback(() => { if (!askedForPush) { askedForPush = true; registerPush(call).catch(() => {}); } }, [call]));
 
   if (!user) return null;
 
@@ -66,9 +72,13 @@ export default function Home() {
   return (
     <Screen contentStyle={{ paddingBottom: 24 }}
       refreshControl={<RefreshControl refreshing={refreshing} tintColor={t.c.muted} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} />}>
-      <View style={{ alignItems: "center", paddingTop: 12, paddingBottom: 10 }}>
-        <T style={{ fontFamily: t.f.displayX, fontSize: 24, color: t.c.brand, letterSpacing: 0.5 }}>Auto-Auto</T>
-        <T style={{ fontFamily: t.f.bodyB, fontSize: 11, letterSpacing: 1.76, textTransform: "uppercase", color: t.c.muted }}>Keep Moving Forward</T>
+      <View style={{ flexDirection: "row", alignItems: "center", paddingTop: 12, paddingBottom: 10 }}>
+        <View style={{ width: 44 }} />
+        <View style={{ flex: 1, alignItems: "center" }}>
+          <T style={{ fontFamily: t.f.displayX, fontSize: 24, color: t.c.brand, letterSpacing: 0.5 }}>Auto-Auto</T>
+          <T style={{ fontFamily: t.f.bodyB, fontSize: 11, letterSpacing: 1.76, textTransform: "uppercase", color: t.c.muted }}>Keep Moving Forward</T>
+        </View>
+        <Bell onPress={() => router.push("/notifications")} />
       </View>
 
       <View style={styles.hero} accessible accessibilityLabel={`Hi ${user.firstName}.`}>
@@ -92,7 +102,7 @@ export default function Home() {
           {[...openJobs, ...pastJobs].map((j) => (
             <Card key={j.id} onPress={() => router.push({ pathname: "/job", params: { id: j.id } })} accessibilityLabel={`${STATUS_LABEL[j.status]}, ${j.vehicle.model}`} style={{ gap: 4 }} testID="job-card">
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <T style={{ fontFamily: t.f.displayX, fontSize: 16, flex: 1 }}>{STATUS_LABEL[j.status]}</T>
+                <T style={{ fontFamily: t.f.displayX, fontSize: 16, flex: 1 }}>{j.warrantyReturn ? `Warranty return · ${STATUS_LABEL[j.status]}` : STATUS_LABEL[j.status]}</T>
                 <T v="small" style={{ fontFamily: t.f.bodyB }}>{money((j.final || j.quote).totalCents)}</T>
               </View>
               <T v="small">{[...j.quote.lines, ...j.quote.pending].map((l) => l.name).join(", ")}</T>
@@ -185,11 +195,18 @@ export default function Home() {
           <Text style={[t.text.body, { fontFamily: t.f.bodyB }]}>Payment cards</Text>
           <Text style={[t.text.body, { color: t.c.brand }]}>›</Text>
         </Card>
+        <Card onPress={() => router.push("/help")} accessibilityLabel="Help and claims" testID="open-help" style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+          <View style={{ flex: 1 }}>
+            <Text style={[t.text.body, { fontFamily: t.f.bodyB }]}>Help & claims</Text>
+            <Text style={t.text.hint}>Report damage, warranty returns</Text>
+          </View>
+          <Text style={[t.text.body, { color: t.c.brand }]}>›</Text>
+        </Card>
       </View>
 
       <View style={{ marginTop: "auto", paddingTop: 28, gap: 10 }}>
         {err ? <Notice tone="bad">{err}</Notice> : null}
-        <Button title="Log out" variant="ghost" onPress={() => run("one", signOut)} loading={busy === "one"} testID="sign-out" />
+        <Button title="Log out" variant="ghost" onPress={() => run("one", async () => { await forgetPush(call); await signOut(); })} loading={busy === "one"} testID="sign-out" />
         {confirmAll ? (
           <View style={{ gap: 10 }}>
             <T v="small" style={{ textAlign: "center" }}>Log out on every phone and computer that's signed in to your account?</T>

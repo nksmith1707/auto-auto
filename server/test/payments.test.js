@@ -244,6 +244,42 @@ test("fleets on card terms start right away and each visit's invoice is charged 
   assert.equal(pi.status, "succeeded");
 });
 
+test("tips are charged to the card and go to the partner; claim holds that job's pay; what's owed comes out of payouts at most 25%", async () => {
+  const job = await book({ windowStart: clock + 5 * HOUR });
+  await ok("POST", `/v1/jobs/${job.id}/accept`, pa);
+  await startWork(job);
+  await ok("POST", `/v1/jobs/${job.id}/complete`, pa, { inspection: INSPECTION });
+  const before = Object.keys(stripe.state.intents).length;
+  const r = await ok("POST", `/v1/jobs/${job.id}/rating`, cust, { stars: 5, tipCents: 800 }, 201);
+  assert.equal(r.tip.status, "succeeded");
+  const pi = Object.values(stripe.state.intents).slice(before).find((x) => x.metadata && x.metadata.kind === "tip");
+  assert.equal(pi.amount, 800);
+
+  // A claim on this job holds its pay (and the tip); other money stays available.
+  const JPG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(200, 7)]).toString("base64");
+  const c = (await ok("POST", "/v1/claims", cust, { jobId: job.id, damageTo: "property", wants: "reimbursement", description: "Oil stain on the garage floor after the visit.", photos: [{ contentType: "image/jpeg", data: JPG }] }, 201)).claim;
+  const held = (await ok("GET", "/v1/payouts", pa)).balance;
+  const jobPay = (await ok("GET", `/v1/jobs/${job.id}`, pa)).job.final.partnerPay;
+  assert.equal(held.heldCents, jobPay.earningsCents + jobPay.partsReimbursedCents + 800);
+  clock += 49 * HOUR;
+  await app.app.tick();
+  await ok("POST", `/v1/admin/claims/${c.id}/decision`, admin, { outcome: "pay", amount: 300, paidBy: "protection", note: "The after photo shows the oil on the floor next to the car." });
+
+  // The $300 deductible comes out of the next cash-out, at most 25% of it.
+  const bal = (await ok("GET", "/v1/payouts", pa)).balance;
+  assert.equal(bal.heldCents, 0);
+  assert.equal(bal.owedCents, 30000);
+  const out = await ok("POST", "/v1/payouts/instant", pa);
+  const gross = bal.availableCents - out.reserveCents - out.feeCents;
+  assert.equal(out.recoveredCents, Math.min(30000, Math.floor(gross * 0.25)));
+  assert.equal(out.amountCents, gross - out.recoveredCents);
+  assert.equal(stripe.state.transfers.at(-1).amount, out.amountCents);
+  const after = await ok("GET", "/v1/payouts", pa);
+  assert.equal(after.balance.owedCents, 30000 - out.recoveredCents);
+  assert.equal(after.balance.availableCents, 0);
+  assert.ok(after.activity.some((a) => a.kind === "adjustment" && /Recovered: Deductible/.test(a.note)));
+});
+
 test("without Stripe nothing is charged, but partner earnings are still recorded", async () => {
   const off = await startTestApp({}, {});
   try {

@@ -99,12 +99,13 @@ async function start() {
   if (VIEWS.some((v) => v[0] === hash)) S.v = hash;
   render();
   // Badge counts for the sidebar.
-  api("GET", "/v1/admin/overview").then((o) => { counts = { apps: o.applications, incidents: o.incidentsOpen, jobs: o.jobsLate + o.paymentProblems, insurance: o.insuranceExpired, payouts: o.payoutsFailed, fleet: o.fleetsInReview + o.fleetInvoicesPastDue }; side(); }).catch(() => {});
+  api("GET", "/v1/admin/overview").then((o) => { counts = countsOf(o); side(); }).catch(() => {});
 }
 
 // ---------- Layout ----------
-const VIEWS = [["overview", "Overview"], ["jobs", "Jobs"], ["apps", "Applications"], ["partners", "Partners"], ["fleet", "Fleet & invoices"], ["incidents", "Incidents"], ["insurance", "Insurance"], ["payouts", "Payouts"], ["pricing", "Pricing & rules"]];
+const VIEWS = [["overview", "Overview"], ["jobs", "Jobs"], ["apps", "Applications"], ["partners", "Partners"], ["claims", "Claims & warranty"], ["ratings", "Ratings"], ["fleet", "Fleet & invoices"], ["incidents", "Incidents"], ["insurance", "Insurance"], ["payouts", "Payouts"], ["pricing", "Pricing & rules"]];
 let counts = {};
+const countsOf = (o) => ({ apps: o.applications, incidents: o.incidentsOpen, jobs: o.jobsLate + o.paymentProblems, insurance: o.insuranceExpired, payouts: o.payoutsFailed, fleet: o.fleetsInReview + o.fleetInvoicesPastDue, claims: o.claimsReady, ratings: o.lowRatings });
 
 function side() {
   $("#side").innerHTML = VIEWS.map(([k, label]) => `<button data-v="${k}" ${S.v === k ? 'aria-current="page"' : ""}>${esc(label)}${counts[k] ? `<span class="cnt">${counts[k]}</span>` : ""}</button>`).join("");
@@ -123,16 +124,22 @@ function tabs(key, list) {
 }
 const tabOf = (key, def) => S.tab[key] || def;
 
+// Only the latest render draws, so a slow page load can't overwrite a tab clicked after it.
+let renderSeq = 0;
 async function render() {
+  const mine = ++renderSeq;
   side();
   const main = $("#main");
   main.innerHTML = `<div class="empty">Loading…</div>`;
+  let html;
   try {
-    main.innerHTML = await V[S.v]();
+    html = await V[S.v]();
   } catch (e) {
-    main.innerHTML = `<div class="note bad">${esc(e.message)}</div>`;
+    if (mine === renderSeq) main.innerHTML = `<div class="note bad">${esc(e.message)}</div>`;
     return;
   }
+  if (mine !== renderSeq) return;
+  main.innerHTML = html;
   $$("[data-tab]", main).forEach((b) => { b.onclick = () => { const [k, t] = b.dataset.tab.split("|"); S.tab[k] = t; render(); }; });
   $$("[data-go]", main).forEach((b) => { b.onclick = () => { const [v, t] = b.dataset.go.split("|"); go(v, t); }; });
   if (BIND[S.v]) BIND[S.v](main);
@@ -159,7 +166,7 @@ const BIND = {};
 // ---------- Overview ----------
 V.overview = async () => {
   const o = await api("GET", "/v1/admin/overview");
-  counts = { apps: o.applications, incidents: o.incidentsOpen, jobs: o.jobsLate + o.paymentProblems, insurance: o.insuranceExpired, payouts: o.payoutsFailed, fleet: o.fleetsInReview + o.fleetInvoicesPastDue };
+  counts = countsOf(o);
   side();
   const att = [
     [o.applications, "brand", `${o.applications} application${o.applications === 1 ? "" : "s"} waiting for a decision`, "apps"],
@@ -173,7 +180,13 @@ V.overview = async () => {
     [o.fleetRunsWaiting, "bad", `${o.fleetRunsWaiting} fleet visit${o.fleetRunsWaiting === 1 ? "" : "s"} within 24 hours with no partner yet`, "fleet|runs"],
     [o.fleetInvoicesPastDue, "warn", `${o.fleetInvoicesPastDue} fleet invoice${o.fleetInvoicesPastDue === 1 ? "" : "s"} past due`, "fleet|invoices"],
     [o.payoutsFailed, "bad", `${o.payoutsFailed} payout${o.payoutsFailed === 1 ? "" : "s"} failed this week`, "payouts"],
-  ].filter((x) => x[0]);
+    [o.claimsReady, "bad", `${o.claimsReady} damage claim${o.claimsReady === 1 ? " is" : "s are"} ready for a decision`, "claims|claims"],
+    [o.claimsOpen - o.claimsReady, "warn", `${o.claimsOpen - o.claimsReady} claim${o.claimsOpen - o.claimsReady === 1 ? " is" : "s are"} waiting for the partner's response`, "claims|claims"],
+    [o.warrantyOpen, "brand", `${o.warrantyOpen} warranty return${o.warrantyOpen === 1 ? "" : "s"} open`, "claims|warranty"],
+    [o.lowRatings, "warn", `${o.lowRatings} low rating${o.lowRatings === 1 ? "" : "s"} (1–2 stars) need a follow-up within 1 business day`, "ratings"],
+    [o.notifyFailures, "warn", `${o.notifyFailures} notification${o.notifyFailures === 1 ? "" : "s"} couldn't be delivered this week`, "overview"],
+  ].filter((x) => x[0] > 0);
+  const np = o.notifyProviders || {};
   return `<div class="ph"><div><h1>Today</h1><p>What needs attention first. Everything here is live.</p></div></div>
   <div class="kpis">
     <div class="kpi"><span>Jobs live now</span><b>${o.jobsLive}</b><small class="muted">on the way or working</small></div>
@@ -184,6 +197,12 @@ V.overview = async () => {
   <div class="card"><div class="card-h"><h2>Needs attention</h2></div>
     ${att.length ? `<div class="att">${att.map(([, tone, text, to]) => `<button data-go="${to}"><span class="sev ${tone}"></span><span class="grow">${esc(text)}</span><span class="muted">›</span></button>`).join("")}</div>`
       : `<p class="muted" style="margin:0">Nothing needs attention right now.</p>`}
+  </div>
+  <div class="card"><div class="card-h"><h2>Notifications</h2></div>
+    <div class="kv"><span>Phone alerts</span><b>${np.push ? pill("On (Expo)", "ok") : pill("Off", "warn")}</b>
+    <span>Texts</span><b>${np.sms ? pill(`Connected (${np.sms})`, "ok") : pill("Not connected", "warn")}</b>
+    <span>Email</span><b>${np.email ? pill(`Connected (${np.email})`, "ok") : pill("Not connected", "warn")}</b></div>
+    ${!np.sms || !np.email ? `<p class="muted" style="margin:0;font-size:12px">Until a provider is connected, those messages only show in the apps' inboxes. Add the keys in Render's Environment settings (see the README).</p>` : ""}
   </div>`;
 };
 
@@ -213,7 +232,7 @@ BIND.jobs = (main) => {
   $$("[data-job]", main).forEach((tr) => { tr.onclick = () => openJob(tr.dataset.job); });
 };
 
-const EVENT = { booked: "Booked", accepted: "Partner accepted", confirmed: "Confirmed", trip_started: "Partner on the way", arrived: "Partner arrived", checked_in: "Work started", completed: "Completed", cancelled: "Cancelled", expired: "No partner found", rescheduled: "Rescheduled", offer_sent: "Offer sent", offer_declined: "Partner passed", offer_expired: "Offer timed out", sent_to_all: "Sent to all partners", search_widened: "Search widened", no_show: "No-show", partner_cancelled: "Partner cancelled", partner_late_cancel: "Partner cancelled late", addons_requested: "Add-ons requested", addon_approved: "Add-on approved", addon_declined: "Add-on declined", glass_quote_sent: "Glass quote sent", glass_approved: "Glass approved", glass_declined: "Glass declined", incident_reported: "Incident reported", deposit_failed: "Deposit declined", partner_approved: "Customer approved partner", partner_declined_by_customer: "Customer declined partner", approval_timed_out: "Approval timed out", switched_partner: "Customer switched partner" };
+const EVENT = { claim_filed: "Damage claim filed", warranty_requested: "Warranty return requested", warranty_return_requested: "Customer asked for a warranty return", warranty_to_board: "Warranty return sent to all partners", warranty_declined: "Original partner can't do the warranty return", booked: "Booked", accepted: "Partner accepted", confirmed: "Confirmed", trip_started: "Partner on the way", arrived: "Partner arrived", checked_in: "Work started", completed: "Completed", cancelled: "Cancelled", expired: "No partner found", rescheduled: "Rescheduled", offer_sent: "Offer sent", offer_declined: "Partner passed", offer_expired: "Offer timed out", sent_to_all: "Sent to all partners", search_widened: "Search widened", no_show: "No-show", partner_cancelled: "Partner cancelled", partner_late_cancel: "Partner cancelled late", addons_requested: "Add-ons requested", addon_approved: "Add-on approved", addon_declined: "Add-on declined", glass_quote_sent: "Glass quote sent", glass_approved: "Glass approved", glass_declined: "Glass declined", incident_reported: "Incident reported", deposit_failed: "Deposit declined", partner_approved: "Customer approved partner", partner_declined_by_customer: "Customer declined partner", approval_timed_out: "Approval timed out", switched_partner: "Customer switched partner" };
 
 async function openJob(id) {
   drawer(`${dh("Loading…")}`);
@@ -424,8 +443,8 @@ V.payouts = async () => {
   const r = await api("GET", "/v1/admin/payouts");
   return `<div class="ph"><div><h1>Payouts</h1><p>Partner balances and payouts. Daily at 9 PM Eastern after 10 jobs; weekly on Mondays before that.</p></div></div>
   ${r.enabled ? "" : `<div class="note warn">Payments are off on this server (no Stripe key). Earnings are still recorded.</div>`}
-  <div class="card"><div class="card-h"><h2>Balances</h2></div><div class="tw"><table><thead><tr><th>Partner</th><th>Schedule</th><th class="r">Available</th><th class="r">Reserve</th><th>Last payout</th><th>Payouts</th></tr></thead><tbody>
-  ${r.partners.map((p) => `<tr><td><b>${esc(p.partner)}</b><br><span class="muted">${esc(p.email)}</span></td><td>${esc(p.schedule)} · ${p.jobsDone} jobs</td><td class="r">${money(p.availableCents)}</td><td class="r">${money(p.reserveCents)}</td><td>${p.lastPayout ? `${money(p.lastPayout.amountCents)} · ${when(p.lastPayout.at)}` : "—"}</td><td>${p.payoutsEnabled ? pill("On", "ok") : pill("Setup unfinished", "warn")}</td></tr>`).join("") || `<tr><td colspan="6" class="empty">No partners have set up payouts yet.</td></tr>`}
+  <div class="card"><div class="card-h"><h2>Balances</h2></div><div class="tw"><table><thead><tr><th>Partner</th><th>Schedule</th><th class="r">Available</th><th class="r">Reserve</th><th class="r">Held (claims)</th><th class="r">Owes</th><th>Last payout</th><th>Payouts</th></tr></thead><tbody>
+  ${r.partners.map((p) => `<tr><td><b>${esc(p.partner)}</b><br><span class="muted">${esc(p.email)}</span></td><td>${esc(p.schedule)} · ${p.jobsDone} jobs</td><td class="r">${money(p.availableCents)}</td><td class="r">${money(p.reserveCents)}</td><td class="r">${p.heldCents ? money(p.heldCents) : "—"}</td><td class="r">${p.owedCents ? money(p.owedCents) : "—"}</td><td>${p.lastPayout ? `${money(p.lastPayout.amountCents)} · ${when(p.lastPayout.at)}` : "—"}</td><td>${p.payoutsEnabled ? pill("On", "ok") : pill("Setup unfinished", "warn")}</td></tr>`).join("") || `<tr><td colspan="8" class="empty">No partners have set up payouts yet.</td></tr>`}
   </tbody></table></div></div>
   <div class="card"><div class="card-h"><h2>Recent payouts</h2></div><div class="tw"><table><thead><tr><th>Partner</th><th>Kind</th><th class="r">Amount</th><th class="r">Fee</th><th>Status</th><th>When</th></tr></thead><tbody>
   ${r.payouts.map((p) => `<tr><td>${esc(p.partner)}</td><td>${esc(p.kind)}</td><td class="r">${money(p.amountCents)}</td><td class="r">${money(p.feeCents)}</td><td>${p.status === "paid" ? pill("Paid", "ok") : pill(`Failed${p.error ? `: ${p.error}` : ""}`, "bad")}</td><td>${when(p.at)}</td></tr>`).join("") || `<tr><td colspan="6" class="empty">No payouts yet.</td></tr>`}
@@ -507,6 +526,119 @@ BIND.fleet = async (main) => {
         });
       });
     };
+  });
+};
+
+// ---------- Claims & warranty ----------
+const C_STATUS = { partner: ["Waiting on partner · 48h", "warn"], review: ["Ready to decide", "brand"], closed: ["Decided", "ok"] };
+const PAID_BY = { protection: "Partner Protection (partner pays the deductible from payouts, max 25% of each)", own_insurer: "Partner's own insurer (Auto-Auto files on their policy)", auto_auto: "Auto-Auto pays now, recovers from partner payouts" };
+V.claims = async () => {
+  const t = tabOf("claims", "claims");
+  const head = `<div class="ph"><div><h1>Claims & warranty</h1><p>Compare the partner's check-in photos with the customer's. Partners get 48 hours to respond before a decision. An open claim holds only that job's pay.</p></div></div>
+  ${tabs("claims", [["claims", "Open claims"], ["closed", "Decided"], ["warranty", "Warranty returns"], ["owed", "Owed by partners"]])}`;
+  if (t === "warranty") {
+    const list = (await api("GET", "/v1/admin/warranty")).returns;
+    return `${head}<div class="tw"><table><thead><tr><th>Customer</th><th>Original job</th><th>Issue</th><th>Original partner</th><th>Return visit</th><th>Charge back</th></tr></thead><tbody>
+    ${list.map((w) => `<tr><td>${esc(w.customer)}</td><td>${esc(w.originalServices.join(", "))}<br><span class="muted">${day(w.originalDoneAt)}</span></td><td>${esc({ same_problem: "Same problem is back", new_noise: "New noise or leak", warning_light: "Warning light", loose_missing: "Loose or missing part" }[w.issue] || w.issue)}${w.details ? `<br><span class="muted">${esc(w.details)}</span>` : ""}</td>
+      <td>${esc(w.originalPartner)}</td><td>${pill(...(JOB_STATUS[w.status] || [w.status]))}<br><span class="muted">${w.returnPartner ? esc(w.returnPartner) : "No partner yet"} · ${when(w.windowStart)}</span> <button class="btn" data-openjob="${esc(w.returnJobId)}">Open</button></td>
+      <td>${w.samePartner ? `<span class="muted">Same partner · no charge</span>` : `<label><input type="checkbox" data-cb="${esc(w.id)}" ${w.chargeBack ? "checked" : ""}> Bill original partner${w.debt ? ` (${money(w.debt.cents)})` : ""}</label>`}</td></tr>`).join("") || `<tr><td colspan="6" class="empty">No warranty returns yet.</td></tr>`}
+    </tbody></table></div><p class="muted" style="margin:0;font-size:13px">When the original partner can't return, another partner does the work and it's charged back to the original partner's payouts, unless you untick it.</p>`;
+  }
+  if (t === "owed") {
+    const list = (await api("GET", "/v1/admin/debts")).debts;
+    return `${head}<div class="tw"><table><thead><tr><th>Partner</th><th>For</th><th class="r">Amount</th><th class="r">Recovered</th><th class="r">Still owed</th><th>Since</th><th></th></tr></thead><tbody>
+    ${list.map((d) => `<tr><td>${esc(d.partner)}</td><td>${esc(d.reason)}</td><td class="r">${money(d.cents)}</td><td class="r">${money(d.recoveredCents)}</td><td class="r">${d.waived ? pill("Waived") : money(d.owedCents)}</td><td>${day(d.at)}</td>
+      <td>${d.owedCents || d.waived ? `<button class="btn" data-waive="${esc(d.id)}|${d.waived ? "0" : "1"}">${d.waived ? "Undo waive" : "Waive"}</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="7" class="empty">No partner owes anything.</td></tr>`}
+    </tbody></table></div><p class="muted" style="margin:0;font-size:13px">Recovered from payouts, oldest first, never more than 25% of any one payout.</p>`;
+  }
+  const list = (await api("GET", `/v1/admin/claims?status=${t === "closed" ? "closed" : "open"}`)).claims;
+  return `${head}<div class="tw"><table><thead><tr><th>Claim</th><th>Filed</th><th>Customer</th><th>Partner</th><th>Damage to</th><th class="r">Estimate</th><th>Coverage</th><th>Status</th></tr></thead><tbody>
+  ${list.map((c) => `<tr class="click" data-claim="${esc(c.id)}"><td class="num"><b>${esc(c.number)}</b></td><td>${when(c.createdAt)}</td><td>${esc(c.customer)}</td><td>${esc(c.partner)}</td><td>${esc(c.damageTo)}</td><td class="r">${money(c.estimateCents)}</td><td>${esc(c.coverage)}</td>
+    <td>${c.status === "closed" ? pill(`${c.outcome}${c.amountCents ? ` · ${money(c.amountCents)}` : ""}`, c.outcome === "Denied" ? "" : "ok") : pill(...C_STATUS[c.status])}</td></tr>`).join("") || `<tr><td colspan="8" class="empty">No claims here.</td></tr>`}
+  </tbody></table></div>`;
+};
+BIND.claims = (main) => {
+  $$("[data-claim]", main).forEach((tr) => { tr.onclick = () => openClaim(tr.dataset.claim); });
+  $$("[data-openjob]", main).forEach((b) => { b.onclick = () => openJob(b.dataset.openjob); });
+  $$("[data-cb]", main).forEach((c) => {
+    c.onchange = async () => {
+      try { await api("POST", `/v1/admin/warranty/${encodeURIComponent(c.dataset.cb)}/charge-back`, { chargeBack: c.checked }); toast(c.checked ? "Original partner will be billed" : "Charge-back waived"); render(); } catch (e) { toast(errText(e)); c.checked = !c.checked; }
+    };
+  });
+  $$("[data-waive]", main).forEach((b) => {
+    b.onclick = async () => {
+      const [id, w] = b.dataset.waive.split("|");
+      try { await api("POST", `/v1/admin/debts/${encodeURIComponent(id)}/waive`, { waive: w === "1" }); toast(w === "1" ? "Waived" : "Owed again"); render(); } catch (e) { toast(errText(e)); }
+    };
+  });
+};
+
+async function openClaim(id) {
+  drawer(dh("Loading…"));
+  let c;
+  try { c = (await api("GET", `/v1/admin/claims/${encodeURIComponent(id)}`)).claim; } catch (e) { drawer(`${dh("Claim")}<div class="note bad">${esc(e.message)}</div>`); return; }
+  const jp = c.jobPhotos || { checkin: [], after: [], damage: [] };
+  drawer(`${dh(`${c.number} · ${c.damageToLabel}`, `Filed ${when(c.createdAt)} · ${c.status === "closed" ? pill("Decided", "ok") : pill(...C_STATUS[c.status])}`)}
+    <div class="kv"><span>Job</span><b>${esc(c.job.services.join(", "))} · ${day(c.job.completedAt)}</b>
+    <span>Customer</span><b>${esc(c.customerName)} · ${esc(c.customerContact.email)}${c.customerContact.phone ? ` · ${esc(c.customerContact.phone)}` : ""}</b>
+    <span>Partner</span><b>${esc(c.partner)} · ${esc(c.partnerContact.email)}${c.partnerContact.phone ? ` · ${esc(c.partnerContact.phone)}` : ""}</b>
+    <span>Coverage</span><b>${esc(c.coverageLabel)}</b><span>Asks for</span><b>${esc(c.wantsLabel)}${c.estimateCents ? ` · estimate ${money(c.estimateCents)}` : ""}</b>
+    ${c.odometer != null ? `<span>Odometer at check-in</span><b class="num">${Number(c.odometer).toLocaleString("en-US")} mi</b>` : ""}</div>
+    <div class="note"><b>Customer:</b> ${esc(c.description)}</div>
+    <div class="sec"><h3>Customer's photos</h3>${thumbs(c.photos)}</div>
+    <div class="sec"><h3>Partner's check-in photos (before work)</h3>${thumbs(jp.checkin)}
+      ${jp.damage && jp.damage.length ? `<div class="note warn">Damage noted at check-in: ${jp.damage.map((d) => `${esc(d.label)}: ${esc(d.note)}`).join("; ")}</div>` : `<p class="muted" style="margin:0;font-size:12px">No existing damage was noted at check-in.</p>`}</div>
+    <div class="sec"><h3>After photos</h3>${thumbs(jp.after)}${c.workNotes ? `<div class="note">Partner notes: ${esc(c.workNotes)}</div>` : ""}</div>
+    ${c.partnerResponse ? `<div class="note"><b>Partner response:</b> ${esc(c.partnerResponse)}</div>` : c.status === "partner" ? `<div class="note warn">The partner hasn't responded. Their 48 hours end ${when(c.responseDueAt)}.</div>` : `<div class="note warn">The partner didn't respond in time.</div>`}
+    ${c.status === "closed" ? `<div class="note ok"><b>Decision: ${esc(c.decision.outcomeLabel)}${c.decision.amountCents ? ` · ${money(c.decision.amountCents)}` : ""}</b>${c.paidByLabel ? ` · ${esc(c.paidByLabel)}` : ""}<br>${esc(c.decision.note)}</div>
+      ${c.debts.length ? `<div class="note">Partner owes ${c.debts.map((d) => `${money(d.cents)} (${money(d.owedCents)} left${d.waived ? ", waived" : ""})`).join(", ")}</div>` : ""}`
+    : `<div class="sec"><h3>Decision</h3>
+      <div class="field"><label for="co">Outcome</label><select class="input" id="co"><option value="">Choose…</option><option value="pay">Partner at fault · pay the customer</option><option value="goodwill">Not proven · goodwill credit</option><option value="deny">Deny · damage was there before or unrelated</option></select></div>
+      <div class="field"><label for="camt">Amount ($)</label><input class="input num" id="camt" type="number" min="0" step="0.01" value="${c.estimateCents ? c.estimateCents / 100 : ""}"></div>
+      <div class="field"><label for="cby">Paid by</label><select class="input" id="cby">${c.paidByOptions.map((k) => `<option value="${k}">${esc(PAID_BY[k])}</option>`).join("")}</select></div>
+      <textarea class="input" id="cnote" placeholder="Explain the decision (both sides see it)"></textarea>
+      ${c.status === "partner" ? `<label class="muted" style="font-size:13px"><input type="checkbox" id="cforce"> Decide now without waiting for the partner</label>` : ""}
+      <div class="err" id="cerr" hidden></div>
+      <button class="btn primary" id="cgo">Send decision</button>
+      <p class="muted" style="margin:0;font-size:12px">Goodwill credits come off the customer's next visit. Payments to the customer for approved claims happen outside the app (insurer or body shop).</p></div>`}
+    <button class="btn" data-openjob="${esc(c.jobId)}">Open the job</button>`, (d) => {
+    $("[data-openjob]", d).onclick = () => openJob(c.jobId);
+    const go = $("#cgo", d);
+    if (!go) return;
+    go.onclick = async () => {
+      const err = $("#cerr", d);
+      err.hidden = true;
+      try {
+        await api("POST", `/v1/admin/claims/${encodeURIComponent(c.id)}/decision`, { outcome: $("#co", d).value, amount: $("#camt", d).value, paidBy: $("#cby", d).value, note: $("#cnote", d).value, force: !!($("#cforce", d) && $("#cforce", d).checked) });
+        toast("Decision sent to the customer and partner");
+        openClaim(c.id);
+        render();
+      } catch (e) { err.textContent = errText(e); err.hidden = false; }
+    };
+  });
+}
+
+// ---------- Ratings ----------
+V.ratings = async () => {
+  const t = tabOf("ratings", "low");
+  const list = (await api("GET", `/v1/admin/ratings?filter=${t}`)).ratings;
+  return `<div class="ph"><div><h1>Ratings</h1><p>Customers who give 1 or 2 stars hear from support within 1 business day. Partners under 4.60 (10+ ratings) are flagged for review.</p></div></div>
+  ${tabs("ratings", [["low", "Low ratings"], ["all", "All ratings"]])}
+  <div class="tw"><table><thead><tr><th>Stars</th><th>Customer</th><th>Partner</th><th>Review</th><th>Private note</th><th>When</th><th></th></tr></thead><tbody>
+  ${list.map((r) => `<tr><td>${"★".repeat(r.stars)}${"☆".repeat(5 - r.stars)}</td><td>${esc(r.customer)}</td><td>${esc(r.partner)}</td><td>${esc(r.review || "")}${r.tags.length ? `<br><span class="muted">${esc(r.tags.join(", "))}</span>` : ""}${r.hidden ? `<br>${pill("Hidden", "warn")}` : ""}</td><td>${esc(r.privateNote || "")}</td><td>${when(r.at)}</td>
+    <td><div class="btns">${r.followedUp ? pill("Followed up", "ok") : r.stars <= 2 ? `<button class="btn" data-fu="${esc(r.id)}">Mark followed up</button>` : ""}${r.review && !r.hidden ? `<button class="btn" data-hide="${esc(r.id)}">Hide review</button>` : ""}<button class="btn" data-openjob="${esc(r.jobId)}">Job</button></div></td></tr>`).join("") || `<tr><td colspan="7" class="empty">No ratings here.</td></tr>`}
+  </tbody></table></div>`;
+};
+BIND.ratings = (main) => {
+  $$("[data-openjob]", main).forEach((b) => { b.onclick = () => openJob(b.dataset.openjob); });
+  $$("[data-fu]", main).forEach((b) => { b.onclick = async () => { try { await api("POST", `/v1/admin/ratings/${encodeURIComponent(b.dataset.fu)}/follow-up`); toast("Marked followed up"); render(); } catch (e) { toast(errText(e)); } }; });
+  $$("[data-hide]", main).forEach((b) => {
+    b.onclick = () => drawer(`${dh("Hide this review")}<p class="muted">The stars still count toward the partner's rating. Only the words are hidden.</p><div class="field"><label for="hreason">Why</label><input class="input" id="hreason" placeholder="Abusive language, personal information, or not about the service"></div><div class="err" id="herr" hidden></div><button class="btn primary" id="hgo">Hide review</button>`, (d) => {
+      $("#hgo", d).onclick = async () => {
+        try { await api("POST", `/v1/admin/ratings/${encodeURIComponent(b.dataset.hide)}/hide`, { reason: $("#hreason", d).value }); toast("Review hidden"); closeDrawer(); render(); }
+        catch (e) { const er = $("#herr", d); er.textContent = errText(e); er.hidden = false; }
+      };
+    });
   });
 };
 

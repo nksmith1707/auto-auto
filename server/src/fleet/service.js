@@ -29,7 +29,9 @@ const J = (s, d) => (s ? JSON.parse(s) : d);
 const text = (v, max) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const cents = (d) => Math.round(d * 100);
 
-export function createFleet({ db, settings, payments = null, photos = null, onboarding = null, geocode = null, requirePhotos = false, now = () => Date.now(), log = () => {} }) {
+export function createFleet({ db, settings, payments = null, photos = null, onboarding = null, geocode = null, notify = null, requirePhotos = false, now = () => Date.now(), log = () => {} }) {
+  const tell = (uid, m) => (notify ? notify.send(db, uid, m).catch((e) => log(`[notify] ${e.message}`)) : null);
+  const fmtMoney = (c) => `$${(c / 100).toFixed(2).replace(/\.00$/, "")}`;
   const settingsFor = async (v) => (await settings.version(v)).settings;
   const daysUntil = (date) => (date ? Math.floor((Date.parse(`${date}T12:00:00Z`) - now()) / DAY) : null);
 
@@ -528,6 +530,8 @@ export function createFleet({ db, settings, payments = null, photos = null, onbo
       if (!(await partnerFits(user, run, f))) throw conflict("You don't offer every service on this visit, or the yard is outside your service area.");
       const r = await db.run(`UPDATE fleet_runs SET status = 'claimed', partner_id = $1, claimed_at = $2, updated_at = $2 WHERE id = $3 AND status = 'posted'`, [user.id, now(), run.id]);
       if (!r.changes) throw conflict("Another partner already took this visit.");
+      const who = await db.get(`SELECT first_name FROM users WHERE id = $1`, [user.id]);
+      await tell(f.owner_id, { category: "booking", title: `Fleet visit #${run.number} confirmed`, body: `${who.first_name} will service your vehicles at the yard on ${new Date(run.window_start).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })}.`, data: { route: "/fleet-run", params: { id: run.id } } });
       return runOut(await runRow(run.id), { forPartner: user });
     },
 
@@ -609,6 +613,7 @@ export function createFleet({ db, settings, payments = null, photos = null, onbo
         if (auto) approvedSoFar += line.priceCents;
         await db.run(`INSERT INTO fleet_addons (id, run_vehicle_id, service_id, reason, line, status, auto_approved, created_at, decided_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
           [newId(), rv.id, id, reason, JSON.stringify(line), auto ? "approved" : "pending", auto ? 1 : 0, now(), auto ? now() : null]);
+        if (!auto) await tell(f.owner_id, { category: "addons", title: `Approve work on ${v.unit}?`, body: `"${reason.slice(0, 120)}" ${line.name} for ${fmtMoney(line.priceCents)}. It's above your auto-approve limit, so it waits for you.`, data: { route: "/fleet-run", params: { id: run.id } } });
       }
       return runOut(await runRow(run.id), { forPartner: user });
     },
@@ -679,6 +684,13 @@ export function createFleet({ db, settings, payments = null, photos = null, onbo
         await payments.creditPartner(user.id, "parts", pay.partsReimbursedCents, `Fleet visit #${run.number} parts at cost`);
       }
       await chargeIfCard(f, inv);
+      const paid = await db.get(`SELECT status FROM fleet_invoices WHERE id = $1`, [inv.id]);
+      await tell(f.owner_id, {
+        category: "receipts", title: `Invoice INV-${inv.number}: ${fmtMoney(inv.total)}`,
+        body: `Fleet visit #${run.number} is done. ${paid && paid.status === "paid" ? "Charged to your card on file." : f.terms === "net30" ? "Due in 30 days." : "Open the invoice in the app to pay."}`,
+        data: { route: "/fleet-invoice", params: { id: inv.id } },
+        emailText: `Fleet visit #${run.number} at ${f.name} is done.\n\n${invLines.map((l) => `${l.label}: ${fmtMoney(l.cents)}`).join("\n")}\n\nInvoice INV-${inv.number}${run.po ? ` · PO ${run.po}` : ""}.`,
+      });
       log(`[fleet] visit #${run.number} finished; invoice INV-${inv.number}`);
       return runOut(await runRow(run.id), { forPartner: user });
     },
@@ -722,6 +734,12 @@ export function createFleet({ db, settings, payments = null, photos = null, onbo
       set.decided_at = now();
       const keys = Object.keys(set);
       await db.run(`UPDATE fleets SET ${keys.map((k, i) => `${k} = $${i + 1}`).join(", ")}, updated_at = $${keys.length + 1} WHERE id = $${keys.length + 2}`, [...keys.map((k) => set[k]), now(), f.id]);
+      if (["approve", "decline", "pause", "reactivate"].includes(b.decision)) {
+        const m = { approve: ["Your business account is approved", f.terms === "net30" ? `You can book fleet visits on net 30 invoices, up to ${fmtMoney(set.credit_limit_cents || f.credit_limit_cents)} open at a time.` : "You can book fleet visits now."],
+          decline: ["About your business account", `We can't open net 30 billing right now. ${note} You can switch to card on file in the app.`],
+          pause: ["Your business account is paused", note], reactivate: ["Your business account is active again", "You can book fleet visits again."] }[b.decision];
+        await tell(f.owner_id, { category: "booking", title: m[0], body: m[1], data: { route: "/fleet" } });
+      }
       log(`[fleet] ${b.decision} ${f.id} by ${staff.id}`);
       return (await api.staffList()).find((x) => x.id === f.id);
     },

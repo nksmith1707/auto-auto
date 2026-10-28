@@ -44,7 +44,8 @@
           "photosPermission": "Auto-Auto Partner uses your photos so you can upload insurance certificates and licenses.",
           "cameraPermission": "Auto-Auto Partner uses the camera so you can photograph insurance certificates and licenses."
         }
-      ]
+      ],
+      "expo-notifications"
     ]
   }
 }

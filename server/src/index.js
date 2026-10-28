@@ -20,10 +20,13 @@ for (let attempt = 1; ; attempt++) {
 }
 await migrate(db, { log: (m) => console.log(`[migrate] ${m}`) });
 
-const { server, jobs } = createApp({ db, config });
-// Every 5 seconds: move offers along (30 seconds each), widen searches, close requests nobody took, and approvals that ran out.
+const { server, jobs, notify, tick } = createApp({ db, config });
+// Every 5 seconds: move offers along (30 seconds each), widen searches, close requests nobody took, approvals that ran out,
+// claims past their response time, reminders, and send waiting notifications.
 jobs.backfillLocations((m) => console.log(m)).catch((e) => console.error("[maps] backfill failed", e));
-setInterval(() => jobs.sweep().catch((e) => console.error("[jobs] sweep failed", e)), 5_000).unref();
+setInterval(() => tick().catch((e) => console.error("[sweep] failed", e)), 5_000).unref();
+const p = notify.providers();
+console.log(`[notify] phone alerts: ${p.push ? "on" : "off"} · texts: ${p.sms || "not connected"} · email: ${p.email || "not connected"}`);
 server.listen(config.port, () => console.log(`Auto-Auto API listening on port ${config.port} (${config.nodeEnv})`));
 
 const stop = async () => {

@@ -109,7 +109,7 @@ export function looksLike(type, buf) {
   return false;
 }
 
-export function createOnboarding({ db, stripe = null, payments = null, now = () => Date.now(), log = () => {} }) {
+export function createOnboarding({ db, notify = null, stripe = null, payments = null, now = () => Date.now(), log = () => {} }) {
   const daysUntil = (date) => (date ? Math.floor((Date.parse(`${date}T12:00:00Z`) - now()) / DAY) : null);
 
   async function appRow(userId) {
@@ -537,6 +537,14 @@ export function createOnboarding({ db, stripe = null, payments = null, now = () 
           [b.decision, note || null, now(), staff.id, id]);
         await t.run(`UPDATE partner_profiles SET status = $1, status_reason = $2, updated_at = $3 WHERE user_id = $4`, [next, b.decision === "approve" ? null : note, now(), id]);
       });
+      if (notify) {
+        const msg = {
+          approve: { title: "You're approved!", body: "Welcome to Auto-Auto. Jobs near you now show up in the app. Set up payouts so we know where to send your earnings." },
+          return: { title: "Your application needs a few changes", body: `${note} Open the app to fix it and send it back.` },
+          deny: { title: "About your Auto-Auto application", body: `We can't approve your application. ${note}` },
+        }[b.decision];
+        await notify.send(db, id, { category: "account", ...msg, data: { route: "/home" } }).catch((e) => log(`[notify] ${e.message}`));
+      }
       log(`[onboarding] ${b.decision} ${id} by ${staff.id}`);
       return api.staffView(id);
     },

@@ -33,6 +33,25 @@ export function loadConfig(env = process.env) {
     // Signs photo links. Set it so links keep working across restarts; without it a random one is made at start.
     photoSecret: env.PHOTO_URL_SECRET || null,
     vinLookup: env.VIN_LOOKUP ? env.VIN_LOOKUP !== "off" : nodeEnv !== "test",
+    // Notifications (step 13). Texts go through Twilio; email through Resend or Postmark (whichever key is set).
+    // Without keys, nothing is sent: messages still show in the app's inbox, and the server log says what would have gone out.
+    twilio: {
+      accountSid: env.TWILIO_ACCOUNT_SID || null,
+      authToken: env.TWILIO_AUTH_TOKEN || null,
+      from: env.TWILIO_FROM_NUMBER || null,
+      messagingServiceSid: env.TWILIO_MESSAGING_SERVICE_SID || null,
+      baseUrl: env.TWILIO_BASE_URL || "https://api.twilio.com",
+    },
+    email: {
+      resendKey: env.RESEND_API_KEY || null,
+      postmarkToken: env.POSTMARK_SERVER_TOKEN || null,
+      // Who emails come from, like "Auto-Auto <hello@yourdomain.com>". The domain must be verified with the provider.
+      from: env.EMAIL_FROM || null,
+      resendBaseUrl: env.RESEND_BASE_URL || "https://api.resend.com",
+      postmarkBaseUrl: env.POSTMARK_BASE_URL || "https://api.postmarkapp.com",
+    },
+    // Phone alerts through Expo's push service. No key needed; EXPO_ACCESS_TOKEN only if push security is turned on.
+    push: { baseUrl: env.EXPO_PUSH_URL || "https://exp.host", accessToken: env.EXPO_ACCESS_TOKEN || null, on: env.PUSH !== "off" },
   };
   if (config.isProd && config.databaseUrl.startsWith("sqlite")) {
     throw new Error("DATABASE_URL must point to Postgres in production.");

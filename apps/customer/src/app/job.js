@@ -8,6 +8,7 @@ import { useAuth } from "../../../shared/session";
 import { Button, Card, Chips, LinkButton, Notice, Screen, T, useTheme } from "../../../shared/ui";
 import { TopBar } from "../components/TopBar";
 import { VisitPhotos } from "../components/Photos";
+import { Stars } from "../components/Care";
 
 const STEPS = ["requested", "confirmed", "en_route", "arrived", "in_progress", "completed"];
 const STEP_LABEL = { requested: "Booked", confirmed: "Confirmed", en_route: "On the way", arrived: "Arrived", in_progress: "Working", completed: "Done" };
@@ -20,6 +21,8 @@ const EVENT = {
   glass_approved: "You approved the glass quote", glass_declined: "You declined the glass quote", completed: "Completed", cancelled: "Cancelled", expired: "No partner found in time",
   rescheduled: "Rescheduled", partner_cancelled: "Partner cancelled; finding another partner", partner_late_cancel: "Partner cancelled late; $15 credit added",
   switched_partner: "You switched partners", no_show: "Marked as a no-show",
+  claim_filed: "You reported damage", warranty_requested: "Warranty return requested", warranty_return_requested: "You asked for a warranty return",
+  warranty_to_board: "Offered to other partners", warranty_declined: "Original partner can't make it", incident_reported: "Partner filed a report",
   offer_sent: "Offered to a nearby partner", offer_declined: "A partner passed", offer_expired: "No answer; trying the next partner",
   sent_to_all: "Sent to all partners nearby", search_widened: "Widened the search to 35 miles", offer_accepted: "A partner accepted",
 };
@@ -108,7 +111,10 @@ export default function JobScreen() {
     <Screen contentStyle={{ paddingBottom: 32 }} refreshControl={<RefreshControl refreshing={refreshing} tintColor={t.c.muted} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} />}>
       <TopBar onBack={back} />
       <View style={{ gap: 16 }}>
-        {fresh && job.status === "requested" ? <Notice tone="ok">Booking received. We're finding your partner now.</Notice> : null}
+        {fresh && job.status === "requested" ? <Notice tone="ok">{job.warrantyReturn ? "Warranty return requested. No charge." : "Booking received. We're finding your partner now."}</Notice> : null}
+        {job.warrantyReturn ? (
+          <Notice testID="warranty-return">{`Warranty return · no charge. ${job.warrantyReturn.issueLabel || ""}. ${job.warrantyReturn.withOriginalPartner ? "Your original partner gets the first chance to come back." : "Another partner is handling it."}`}</Notice>
+        ) : null}
         <View style={{ gap: 4, alignItems: "center" }}>
           <T v="h1" accessibilityRole="header" testID="job-status">{STATUS_LABEL[job.status]}</T>
           <T v="muted" style={{ textAlign: "center" }}>{job.vehicle.year} {job.vehicle.make} {job.vehicle.model} · {job.place.label}</T>
@@ -133,7 +139,7 @@ export default function JobScreen() {
         {job.status === "awaiting_approval" && job.partner ? (
           <Card style={{ gap: 10, borderColor: t.c.brand, borderWidth: 2 }}>
             <T v="title">Approve your partner</T>
-            <T v="small">{job.partner.name} · {job.partner.jobsDone} job{job.partner.jobsDone === 1 ? "" : "s"} done on Auto-Auto</T>
+            <T v="small">{job.partner.name}{job.partner.rating && job.partner.rating.average ? ` · ★ ${job.partner.rating.average.toFixed(1)} (${job.partner.rating.count})` : ""} · {job.partner.jobsDone} job{job.partner.jobsDone === 1 ? "" : "s"} done on Auto-Auto</T>
             <T v="hint">Answer within {fmtLeft(job.approvalDeadline - nowTick)}, or we'll offer the job to the next partner.</T>
             <View style={{ flexDirection: "row", gap: 10 }}>
               <Button style={{ flex: 1 }} title="Pick someone else" variant="ghost" loading={busy === "decline"} onPress={() => act("decline", () => call("jobAction", job.id, "decline-partner"))} />
@@ -144,7 +150,7 @@ export default function JobScreen() {
           <Card style={{ gap: 4 }}>
             <Text style={t.text.label}>Your partner</Text>
             <T style={{ fontFamily: t.f.displayX, fontSize: 18 }}>{job.partner.name}</T>
-            <T v="hint">{job.partner.jobsDone} job{job.partner.jobsDone === 1 ? "" : "s"} done · Phone numbers are never shared.</T>
+            <T v="hint">{job.partner.rating && job.partner.rating.average ? `★ ${job.partner.rating.average.toFixed(1)} (${job.partner.rating.count}) · ` : ""}{job.partner.jobsDone} job{job.partner.jobsDone === 1 ? "" : "s"} done · Phone numbers are never shared.</T>
             {["confirmed", "en_route", "arrived", "in_progress"].includes(job.status) || (["completed", "cancelled"].includes(job.status) && Date.now() - (job.updatedAt || 0) < 86_400_000) ? (
               <Button title={`Message ${job.partner.name.split(" ")[0]}`} variant="ghost" onPress={() => router.push({ pathname: "/chat", params: { id: job.id, name: job.partner.name } })} testID="open-chat" />
             ) : null}
@@ -194,6 +200,38 @@ export default function JobScreen() {
             <Row left="Total" right={money(job.quote.totalCents + job.addons.filter((a) => a.status === "approved").reduce((s, a) => s + a.line.priceCents, 0), { always: true })} strong />
           </Card>
         )}
+
+        {job.status === "completed" && job.care ? (
+          <Card style={{ gap: 10 }} testID="after-visit">
+            {job.care.rating ? (
+              <View style={{ gap: 4, alignItems: "center" }}>
+                <T v="label">You rated this visit</T>
+                <Stars value={job.care.rating.stars} size={26} />
+                {job.care.tip ? <T v="hint">{`Tip: ${money(job.care.tip.amountCents, { always: true })}. Thank you!`}</T> : null}
+                {!job.care.tip && Date.now() < job.care.tipOpenUntil ? <LinkButton title={`Add a tip for ${job.partner ? job.partner.name.split(" ")[0] : "your partner"}`} onPress={() => router.push({ pathname: "/rate", params: { id: job.id, tipOnly: "1" } })} /> : null}
+              </View>
+            ) : job.care.canRate ? (
+              <View style={{ gap: 8 }}>
+                <T v="title">How did {job.partner ? job.partner.name.split(" ")[0] : "it"} do?</T>
+                <T v="hint">{Date.now() < job.care.tipOpenUntil ? "Rate the visit and add a tip. 100% of tips go to your partner." : "Rate the visit. It helps other drivers."}</T>
+                <Button title="Rate & tip" onPress={() => router.push({ pathname: "/rate", params: { id: job.id } })} testID="open-rate" />
+              </View>
+            ) : null}
+            {job.care.claims.map((c) => (
+              <Card key={c.id} onPress={() => router.push({ pathname: "/claim", params: { id: c.id } })} accessibilityLabel={`Claim ${c.number}`} style={{ gap: 2 }}>
+                <T v="small" style={{ fontFamily: t.f.bodyB }}>{`Claim ${c.number}`}</T>
+                <T v="hint">{c.status === "closed" ? "Decided" : c.status === "review" ? "We're reviewing it" : "Waiting for your partner's response"} ›</T>
+              </Card>
+            ))}
+            {job.care.openWarrantyReturn && !job.warrantyReturn ? (
+              <Button title="Open your warranty return" variant="ghost" onPress={() => router.push({ pathname: "/job", params: { id: job.care.openWarrantyReturn } })} />
+            ) : null}
+            <View style={{ flexDirection: "row", justifyContent: "center", gap: 24, flexWrap: "wrap" }}>
+              {job.care.warrantyActive && !job.care.openWarrantyReturn ? <LinkButton title="Problem with this repair?" onPress={() => router.push({ pathname: "/warranty", params: { id: job.warrantyReturn ? job.warrantyReturn.originalJobId : job.id } })} /> : null}
+              {!job.care.claims.some((c) => c.status !== "closed") ? <LinkButton title="Report damage" onPress={() => router.push({ pathname: "/claim-new", params: { jobId: job.id } })} textStyle={{ color: t.c.bad }} /> : null}
+            </View>
+          </Card>
+        ) : null}
 
         {job.payment && job.payment.enabled ? <PaymentCard job={job} busy={busy === "pay"}
           onPay={() => act("pay", () => call("payJob", job.id))} onCards={() => router.push("/cards")} /> : null}

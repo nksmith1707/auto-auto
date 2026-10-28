@@ -98,8 +98,27 @@ export function createPhotos({ db, secret = randomBytes(32).toString("hex"), now
     return forOwner(db, owner, ownerId);
   }
 
+  // Photos attached to a damage claim or a warranty return (stored like incident photos).
+  const ATTACH = { claim: "claim_id", warranty: "warranty_id" };
+  function decodeAll(list, field, { min = 0, max = 4, minMsg } = {}) {
+    const arr = Array.isArray(list) ? list : [];
+    if (arr.length > max) throw bad(field, `Add up to ${max} photos.`);
+    if (arr.length < min) throw bad(field, minMsg || "Add at least one photo.");
+    return arr.map((p) => decode(p, field));
+  }
+  async function attach(t, owner, ownerId, files, user) {
+    for (const [i, f] of files.entries()) {
+      const blobId = await storeBlob(t, f);
+      await t.run(`INSERT INTO photos (id, ${ATTACH[owner]}, kind, slot, blob_id, content_type, size_bytes, uploaded_by, created_at) VALUES ($1, $2, 'incident', $3, $4, $5, $6, $7, $8)`,
+        [newId(), ownerId, `p${i}`, blobId, f.type, f.buf.length, user.id, now()]);
+    }
+  }
+  async function attached(q, owner, ownerId) {
+    return (await q.all(`SELECT * FROM photos WHERE ${ATTACH[owner]} = $1 AND replaced_at IS NULL ORDER BY slot`, [ownerId])).map(photoOut);
+  }
+
   const api = {
-    CHECKIN_SLOTS, AFTER_SLOTS, forJob, forOwner, link, saveSlot, setDamage,
+    CHECKIN_SLOTS, AFTER_SLOTS, forJob, forOwner, link, saveSlot, setDamage, decodeAll, attach, attached,
 
     // Missing proof for a step, or null when it's all there.
     async missing(jobId, kind, owner = "job") {

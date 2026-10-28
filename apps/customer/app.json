@@ -36,7 +36,15 @@
           "backgroundColor": "#BFD6FF"
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-notifications",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Auto-Auto uses your photos so you can show damage or a problem with a repair.",
+          "cameraPermission": "Auto-Auto uses the camera so you can photograph damage or a problem with a repair."
+        }
+      ]
     ]
   }
 }

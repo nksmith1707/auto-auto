@@ -7,7 +7,7 @@ import { StripeError, cardMessage } from "./stripe.js";
 const HOUR = 3_600_000;
 const J = (s, d = null) => (s ? JSON.parse(s) : d);
 
-export function createPayments({ db, stripe, settings, now = () => Date.now(), log = () => {} }) {
+export function createPayments({ db, stripe, settings, notify = null, now = () => Date.now(), log = () => {} }) {
   const enabled = !!stripe;
   const pid = () => `${String(now()).padStart(15, "0")}-${newId().slice(0, 8)}`;
 
@@ -199,12 +199,38 @@ export function createPayments({ db, stripe, settings, now = () => Date.now(), l
   }
 
   // ---------- Payouts ----------
+  // Available = everything earned minus what's been paid out, minus pay held for jobs with an open claim (that job only).
   async function balanceOf(partnerId) {
     const rows = await db.all(`SELECT kind, SUM(cents) AS c FROM partner_ledger WHERE partner_id = $1 GROUP BY kind`, [partnerId]);
     const by = Object.fromEntries(rows.map((r) => [r.kind, Number(r.c)]));
     const total = Object.values(by).reduce((a, b) => a + b, 0);
-    return { availableCents: total, reserveCents: -((by.reserve || 0) + (by.reserve_release || 0)), earnedCents: (by.earnings || 0) + (by.fee_share || 0), partsCents: by.parts || 0 };
+    const held = Number((await db.get(
+      `SELECT COALESCE(SUM(l.cents), 0) AS c FROM partner_ledger l WHERE l.partner_id = $1 AND l.kind IN ('earnings', 'parts') AND l.job_id IN (SELECT job_id FROM claims WHERE partner_id = $1 AND status <> 'closed')`,
+      [partnerId],
+    )).c);
+    const owed = Number((await db.get(`SELECT COALESCE(SUM(cents - recovered_cents), 0) AS c FROM partner_debts WHERE partner_id = $1 AND waived_at IS NULL`, [partnerId])).c);
+    return { availableCents: total - held, heldCents: held, owedCents: owed, reserveCents: -((by.reserve || 0) + (by.reserve_release || 0)), earnedCents: (by.earnings || 0) + (by.fee_share || 0), partsCents: by.parts || 0 };
   }
+
+  // Deductibles and charge-backs come out of a payout, oldest first, never more than recoverMax% of it.
+  async function recoverDebts(partnerId, amount, s, payoutId) {
+    const debts = await db.all(`SELECT * FROM partner_debts WHERE partner_id = $1 AND waived_at IS NULL AND recovered_cents < cents ORDER BY created_at`, [partnerId]);
+    let room = Math.floor(amount * s.recoverMax / 100);
+    let total = 0;
+    for (const d of debts) {
+      if (room <= 0) break;
+      const take = Math.min(room, d.cents - d.recovered_cents);
+      await db.run(`UPDATE partner_debts SET recovered_cents = recovered_cents + $1 WHERE id = $2`, [take, d.id]);
+      await ledger(partnerId, d.job_id, "adjustment", -take, `Recovered: ${d.reason}`, payoutId);
+      room -= take;
+      total += take;
+    }
+    return total;
+  }
+  const plannedRecovery = async (partnerId, amount, s) => {
+    const owed = Number((await db.get(`SELECT COALESCE(SUM(cents - recovered_cents), 0) AS c FROM partner_debts WHERE partner_id = $1 AND waived_at IS NULL`, [partnerId])).c);
+    return Math.min(owed, Math.floor(amount * s.recoverMax / 100));
+  };
   const jobsDone = async (partnerId) => Number((await db.get(`SELECT COUNT(*) AS n FROM jobs WHERE partner_id = $1 AND status = 'completed'`, [partnerId])).n);
 
   async function payOut(partnerId, kind, s) {
@@ -221,7 +247,9 @@ export function createPayments({ db, stripe, settings, now = () => Date.now(), l
     const fee = kind === "instant" ? Math.round(s.instantFee * 100) : 0;
     let reserve = 0;
     if (done < s.dailyAfter) reserve = Math.round(availableCents * s.reservePct / 100);
-    const amount = availableCents - reserve - fee;
+    const gross = availableCents - reserve - fee;
+    const recover = gross > 0 ? await plannedRecovery(partnerId, gross, s) : 0;
+    const amount = gross - recover;
     if (amount <= 0) return { ok: false, message: `Your balance is less than the ${kind === "instant" ? "cash-out fee" : "minimum"}.` };
     const payoutId = pid();
     try {
@@ -229,8 +257,16 @@ export function createPayments({ db, stripe, settings, now = () => Date.now(), l
       await db.run(`INSERT INTO payouts (id, partner_id, kind, amount_cents, fee_cents, stripe_transfer_id, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, 'paid', $7)`, [payoutId, partnerId, kind, amount, fee, tr.id, now()]);
       if (reserve) await ledger(partnerId, null, "reserve", -reserve, `${s.reservePct}% new-partner reserve`, payoutId);
       if (fee) await ledger(partnerId, null, "cashout_fee", -fee, "Instant cash-out fee", payoutId);
+      const recovered = recover ? await recoverDebts(partnerId, gross, s, payoutId) : 0;
       await ledger(partnerId, null, "payout", -amount, `${kind[0].toUpperCase()}${kind.slice(1)} payout`, payoutId);
-      return { ok: true, amountCents: amount, feeCents: fee, reserveCents: reserve };
+      if (notify) {
+        await notify.send(db, partnerId, {
+          category: "earnings", title: `${kind === "instant" ? "Cash-out" : "Payout"} sent: $${(amount / 100).toFixed(2)}`,
+          body: `${kind === "instant" ? "It usually arrives within minutes." : "It usually arrives in 1–2 business days."}${recovered ? ` $${(recovered / 100).toFixed(2)} went toward what you owe (deductibles or charge-backs).` : ""}`,
+          data: { route: "/payouts" },
+        }).catch((e) => log(`[notify] ${e.message}`));
+      }
+      return { ok: true, amountCents: amount, feeCents: fee, reserveCents: reserve, recoveredCents: recovered };
     } catch (e) {
       log(`[payouts] transfer failed for ${partnerId}: ${e.message}`);
       await db.run(`INSERT INTO payouts (id, partner_id, kind, amount_cents, fee_cents, status, error, created_at) VALUES ($1, $2, $3, $4, $5, 'failed', $6, $7)`, [payoutId, partnerId, kind, amount, fee, e.message, now()]);
@@ -377,6 +413,8 @@ export function createPayments({ db, stripe, settings, now = () => Date.now(), l
     },
     // Partner pay for a fleet visit goes to the same ledger as jobs.
     creditPartner: (partnerId, kind, cents, note) => ledger(partnerId, null, kind, cents, note),
+    // Money tied to one job (tips), so a claim on that job holds it too.
+    creditJob: (partnerId, jobId, kind, cents, note) => ledger(partnerId, jobId, kind, cents, note),
 
     // ---------- Partner payouts ----------
     async payoutInfo(user) {
@@ -392,6 +430,10 @@ export function createPayments({ db, stripe, settings, now = () => Date.now(), l
         schedule: { kind: done >= s.dailyAfter ? "daily" : "weekly", jobsDone: done, dailyAfter: s.dailyAfter, reservePct: s.reservePct, instantFeeCents: Math.round(s.instantFee * 100), time: done >= s.dailyAfter ? "Every day at 9 PM" : "Mondays at 9 PM" },
         payouts: list.map((p) => ({ id: p.id, kind: p.kind, amountCents: p.amount_cents, feeCents: p.fee_cents, status: p.status, at: p.created_at })),
         activity: recent.map((l) => ({ kind: l.kind, cents: l.cents, note: l.note, jobId: l.job_id, at: l.created_at })),
+        // Deductibles and warranty charge-backs still being paid back from payouts.
+        owed: (await db.all(`SELECT * FROM partner_debts WHERE partner_id = $1 AND waived_at IS NULL AND recovered_cents < cents ORDER BY created_at`, [user.id]))
+          .map((d) => ({ id: d.id, reason: d.reason, cents: d.cents, owedCents: d.cents - d.recovered_cents, at: d.created_at })),
+        recoverMaxPct: s.recoverMax,
       };
     },
     async startPayoutSetup(user, { returnTo, apiBase }) {

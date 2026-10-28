@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useColorScheme, View } from "react-native";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -9,6 +9,7 @@ import { Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold, Manrope_700
 import { createApi, DEFAULT_API_URL } from "../../../shared/api";
 import { AuthProvider, useAuth } from "../../../shared/session";
 import { useAuthRouting } from "../../../shared/useAuthRouting";
+import { listenForTaps } from "../../../shared/push";
 import { ThemeProvider, useTheme } from "../../../shared/ui";
 import { makeTheme } from "../theme";
 import { Splash } from "../components/Splash";
@@ -51,6 +52,9 @@ function Routes() {
   const [minTime, setMinTime] = useState(true);
   useEffect(() => { const id = setTimeout(() => setMinTime(false), 900); return () => clearTimeout(id); }, []);
   const signedIn = status === "signedIn";
+  const router = useRouter();
+  // Tapping a phone alert opens what it's about.
+  useEffect(() => (signedIn ? listenForTaps((d) => router.push({ pathname: d.route, params: d.params || {} })) : undefined), [signedIn, router]);
 
   return (
     <View style={{ flex: 1, backgroundColor: t.c.screen }}>
@@ -74,6 +78,12 @@ function Routes() {
             <Stack.Screen name="fleet-run" />
             <Stack.Screen name="fleet-invoice" />
             <Stack.Screen name="cards" />
+            <Stack.Screen name="notifications" />
+            <Stack.Screen name="rate" />
+            <Stack.Screen name="help" />
+            <Stack.Screen name="claim-new" />
+            <Stack.Screen name="claim" />
+            <Stack.Screen name="warranty" />
           </Stack.Protected>
           <Stack.Protected guard={!signedIn}>
             <Stack.Screen name="sign-in" />

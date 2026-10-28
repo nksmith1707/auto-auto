@@ -22,9 +22,17 @@ import { createAdmin } from "./admin/service.js";
 import { adminRoutes } from "./admin/routes.js";
 import { createFleet } from "./fleet/service.js";
 import { fleetRoutes } from "./fleet/routes.js";
+import { createNotify } from "./notify/service.js";
+import { notifyRoutes } from "./notify/routes.js";
+import { createEmail } from "./notify/providers.js";
+import { createCare } from "./care/service.js";
+import { careRoutes } from "./care/routes.js";
 
-export function createApp({ db, config, mailer = createMailer({ isProd: config.isProd }), log = console, vinFetch = config.vinLookup ? globalThis.fetch : null, mapsFetch = globalThis.fetch, stripeFetch = globalThis.fetch, now = () => Date.now() }) {
+export function createApp({ db, config, mailer = null, log = console, vinFetch = config.vinLookup ? globalThis.fetch : null, mapsFetch = globalThis.fetch, stripeFetch = globalThis.fetch, notifyFetch = globalThis.fetch, now = () => Date.now() }) {
   const router = createRouter();
+  const L = (m) => (log.log ? log.log(m) : undefined);
+  mailer = mailer || createMailer({ isProd: config.isProd, email: createEmail({ ...(config.email || {}), fetchImpl: notifyFetch }), log: L });
+  const notify = createNotify({ db, config, fetchImpl: notifyFetch, now, log: L });
   const auth = createAuth({ db, config, mailer });
 
   router.get("/health", async (req, res) => {
@@ -39,17 +47,20 @@ export function createApp({ db, config, mailer = createMailer({ isProd: config.i
   const settings = createSettingsStore({ db, now });
   pricingRoutes(router, { db, auth, settings });
   const stripe = createStripe({ secretKey: config.stripeSecretKey, baseUrl: config.stripeBaseUrl, fetchImpl: stripeFetch });
-  const payments = createPayments({ db, stripe, settings, now, log: (m) => (log.log ? log.log(m) : undefined) });
-  const onboarding = createOnboarding({ db, stripe, payments, now, log: (m) => (log.log ? log.log(m) : undefined) });
+  const payments = createPayments({ db, stripe, settings, notify, now, log: L });
+  const onboarding = createOnboarding({ db, stripe, payments, notify, now, log: L });
   const photos = createPhotos({ db, now, ...(config.photoSecret ? { secret: config.photoSecret } : {}) });
-  const jobs = createJobs({ db, settings, geocode, payments, onboarding, photos, requirePhotos: config.requireJobPhotos, now, log: (m) => (log.log ? log.log(m) : undefined) });
+  const jobs = createJobs({ db, settings, geocode, payments, onboarding, photos, notify, requirePhotos: config.requireJobPhotos, now, log: L });
   jobRoutes(router, { db, auth, jobs, now });
   paymentRoutes(router, { auth, payments, jobs, config });
   onboardingRoutes(router, { auth, onboarding, config });
   photoRoutes(router, { auth, photos });
-  const fleet = createFleet({ db, settings, payments, photos, onboarding, geocode, requirePhotos: config.requireJobPhotos, now, log: (m) => (log.log ? log.log(m) : undefined) });
+  const fleet = createFleet({ db, settings, payments, photos, onboarding, geocode, notify, requirePhotos: config.requireJobPhotos, now, log: L });
   fleetRoutes(router, { auth, fleet });
-  const admin = createAdmin({ db, jobs, photos, payments, now });
+  const care = createCare({ db, settings, payments, photos, notify, now, log: L });
+  careRoutes(router, { auth, care, jobs });
+  notifyRoutes(router, { auth, notify });
+  const admin = createAdmin({ db, jobs, photos, payments, notify, now });
   adminRoutes(router, { auth, admin });
 
   const server = http.createServer(async (req, res) => {
@@ -86,5 +97,12 @@ export function createApp({ db, config, mailer = createMailer({ isProd: config.i
   });
   server.requestTimeout = 15_000;
   server.headersTimeout = 10_000;
-  return { server, auth, mailer, settings, jobs, payments, onboarding, photos, fleet };
+  // Everything time-based outside a request: offers, claims past their response time, reminders, and sending notifications.
+  async function tick() {
+    await jobs.sweep();
+    await care.sweep();
+    await admin.reminders();
+    await notify.flush();
+  }
+  return { server, auth, mailer, settings, jobs, payments, onboarding, photos, fleet, care, notify, admin, tick };
 }

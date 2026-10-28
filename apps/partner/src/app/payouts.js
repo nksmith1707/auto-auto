@@ -108,6 +108,7 @@ export default function Payouts() {
           <Text style={label}>Balance</Text>
           <Text style={{ fontFamily: fonts.displayH, fontSize: 40, color: p.money }} testID="balance">{money(b.availableCents, { always: true })}</Text>
           {b.reserveCents ? <Text style={{ fontFamily: fonts.body, fontSize: 13, color: p.muted }}>{money(b.reserveCents, { always: true })} held in reserve</Text> : null}
+          {b.heldCents ? <Text style={{ fontFamily: fonts.body, fontSize: 13, color: p.money }} testID="held">{money(b.heldCents, { always: true })} on hold for a job with an open claim</Text> : null}
           <Text style={{ fontFamily: fonts.bodyB, fontSize: 13, color: p.brandText, textAlign: "center" }}>
             {s.time}{s.kind === "weekly" ? ` · daily after ${s.dailyAfter} jobs (${s.jobsDone} done)` : ""}
           </Text>
@@ -139,6 +140,14 @@ export default function Payouts() {
             )}
           </View>
         )}
+
+        {info.owed && info.owed.length ? (
+          <View style={card} testID="owed">
+            <Text style={label}>Paying back</Text>
+            {info.owed.map((d) => <Line key={d.id} left={d.reason} sub={`${money(d.cents, { always: true })} total`} right={`${money(d.owedCents, { always: true })} left`} color={p.money} />)}
+            <Text style={{ fontFamily: fonts.body, fontSize: 12, color: p.muted }}>Taken from your payouts, never more than {info.recoverMaxPct}% of any one payout.</Text>
+          </View>
+        ) : null}
 
         <TaxStatements call={call} />
 
