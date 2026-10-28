@@ -357,6 +357,27 @@ export function createPayments({ db, stripe, settings, now = () => Date.now(), l
       };
     },
 
+    // ---------- Fleet invoices (billed per visit, not per job) ----------
+    hasCard: async (userId) => !!(await defaultCard(userId)),
+    // Charges a customer's default card for an invoice. Never throws for card problems.
+    async chargeInvoice(userId, amountCents, { key, description, metadata }) {
+      if (!enabled) return { ok: false, message: "Payments aren't turned on yet." };
+      const card = await defaultCard(userId);
+      if (!card) return { ok: false, message: "Add a card to your account to pay this invoice." };
+      const cus = (await db.get(`SELECT stripe_customer_id FROM stripe_customers WHERE user_id = $1`, [userId])).stripe_customer_id;
+      try {
+        const pi = await stripe.createPaymentIntent({ amount: amountCents, customer: cus, payment_method: card.id, capture_method: "automatic", description, metadata }, key);
+        if (pi.status !== "succeeded") return { ok: false, message: "Your bank needs to approve this payment. Add the card again in the app, then try again." };
+        return { ok: true, stripeId: pi.id, card: `${card.brand[0].toUpperCase()}${card.brand.slice(1)} •••• ${card.last4}` };
+      } catch (e) {
+        if (!(e instanceof StripeError)) throw e;
+        log(`[payments] invoice charge failed: ${e.code || e.message}`);
+        return { ok: false, message: cardMessage(e) };
+      }
+    },
+    // Partner pay for a fleet visit goes to the same ledger as jobs.
+    creditPartner: (partnerId, kind, cents, note) => ledger(partnerId, null, kind, cents, note),
+
     // ---------- Partner payouts ----------
     async payoutInfo(user) {
       const s = (await settings.current()).settings;

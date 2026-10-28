@@ -50,9 +50,11 @@ export function createPhotos({ db, secret = randomBytes(32).toString("hex"), now
 
   const photoOut = (p) => ({ id: p.id, slot: p.slot, label: p.kind === "incident" ? "Photo" : LABEL[p.slot], kind: p.kind, damageNote: p.damage_note, takenAt: p.created_at, url: link(p.id) });
 
-  // Current photos for a job, grouped. Each comes with a link that works for a few hours.
-  async function forJob(q, jobId) {
-    const rows = await q.all(`SELECT * FROM photos WHERE job_id = $1 AND replaced_at IS NULL AND kind IN ('checkin', 'after') ORDER BY slot`, [jobId]);
+  // Current photos for a job (or a fleet vehicle on a run), grouped. Each comes with a link that works for a few hours.
+  const OWNER = { job: "job_id", fleet: "run_vehicle_id" };
+  const forJob = (q, jobId) => forOwner(q, "job", jobId);
+  async function forOwner(q, owner, ownerId) {
+    const rows = await q.all(`SELECT * FROM photos WHERE ${OWNER[owner]} = $1 AND replaced_at IS NULL AND kind IN ('checkin', 'after') ORDER BY slot`, [ownerId]);
     const by = Object.fromEntries(rows.map((r) => [r.slot, r]));
     return {
       checkin: CHECKIN_SLOTS.filter(([s]) => by[s]).map(([s]) => photoOut(by[s])),
@@ -69,44 +71,58 @@ export function createPhotos({ db, secret = randomBytes(32).toString("hex"), now
     return job;
   }
 
+  const slotKind = (slot) => (CHECKIN_SLOTS.some(([s]) => s === slot) ? "checkin" : AFTER_SLOTS.some(([s]) => s === slot) ? "after" : null);
+
+  // Saves one slot's photo (replacing any earlier one). Callers check who may upload and when.
+  async function saveSlot(owner, ownerId, user, b, { allow }) {
+    const slot = String(b.slot || "");
+    const kind = slotKind(slot);
+    if (!kind) throw bad("slot", "Pick which photo this is.");
+    allow(kind);
+    const file = decode(b);
+    const note = typeof b.damageNote === "string" ? b.damageNote.trim().slice(0, 200) || null : null;
+    await db.tx(async (t) => {
+      const blobId = await storeBlob(t, file);
+      await t.run(`UPDATE photos SET replaced_at = $1 WHERE ${OWNER[owner]} = $2 AND slot = $3 AND replaced_at IS NULL`, [now(), ownerId, slot]);
+      await t.run(
+        `INSERT INTO photos (id, ${OWNER[owner]}, kind, slot, blob_id, content_type, size_bytes, damage_note, uploaded_by, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [newId(), ownerId, kind, slot, blobId, file.type, file.buf.length, kind === "checkin" ? note : null, user.id, now()],
+      );
+    });
+    return forOwner(db, owner, ownerId);
+  }
+  async function setDamage(owner, ownerId, slot, b) {
+    const note = typeof b.note === "string" ? b.note.trim().slice(0, 200) || null : null;
+    const r = await db.run(`UPDATE photos SET damage_note = $1 WHERE ${OWNER[owner]} = $2 AND slot = $3 AND kind = 'checkin' AND replaced_at IS NULL`, [note, ownerId, String(slot)]);
+    if (!r.changes) throw bad("slot", "Take that photo first.");
+    return forOwner(db, owner, ownerId);
+  }
+
   const api = {
-    CHECKIN_SLOTS, AFTER_SLOTS, forJob, link,
+    CHECKIN_SLOTS, AFTER_SLOTS, forJob, forOwner, link, saveSlot, setDamage,
 
     // Missing proof for a step, or null when it's all there.
-    async missing(jobId, kind) {
-      const p = await forJob(db, jobId);
+    async missing(jobId, kind, owner = "job") {
+      const p = await forOwner(db, owner, jobId);
       const need = kind === "checkin" ? p.checkinNeeded : p.afterNeeded;
       return need.length ? need.map((n) => n.label) : null;
     },
 
     async upload(user, jobId, b) {
       const job = await partnerJob(user, jobId);
-      const slot = String(b.slot || "");
-      const kind = CHECKIN_SLOTS.some(([s]) => s === slot) ? "checkin" : AFTER_SLOTS.some(([s]) => s === slot) ? "after" : null;
-      if (!kind) throw bad("slot", "Pick which photo this is.");
-      if (kind === "checkin" && job.status !== "arrived") throw new HttpError(409, "wrong_step", job.status === "in_progress" ? "Check-in photos are locked once work starts." : "Take check-in photos after you tap I've arrived.");
-      if (kind === "after" && job.status !== "in_progress") throw new HttpError(409, "wrong_step", "Take after photos while you're working, before you complete the job.");
-      const file = decode(b);
-      const note = typeof b.damageNote === "string" ? b.damageNote.trim().slice(0, 200) || null : null;
-      await db.tx(async (t) => {
-        const blobId = await storeBlob(t, file);
-        await t.run(`UPDATE photos SET replaced_at = $1 WHERE job_id = $2 AND slot = $3 AND replaced_at IS NULL`, [now(), job.id, slot]);
-        await t.run(
-          `INSERT INTO photos (id, job_id, kind, slot, blob_id, content_type, size_bytes, damage_note, uploaded_by, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-          [newId(), job.id, kind, slot, blobId, file.type, file.buf.length, kind === "checkin" ? note : null, user.id, now()],
-        );
+      return saveSlot("job", job.id, user, b, {
+        allow: (kind) => {
+          if (kind === "checkin" && job.status !== "arrived") throw new HttpError(409, "wrong_step", job.status === "in_progress" ? "Check-in photos are locked once work starts." : "Take check-in photos after you tap I've arrived.");
+          if (kind === "after" && job.status !== "in_progress") throw new HttpError(409, "wrong_step", "Take after photos while you're working, before you complete the job.");
+        },
       });
-      return forJob(db, job.id);
     },
 
     // Existing damage the partner saw at check-in. The customer sees it in their service record.
     async noteDamage(user, jobId, slot, b) {
       const job = await partnerJob(user, jobId);
       if (job.status !== "arrived") throw new HttpError(409, "wrong_step", "Damage notes are part of check-in, before work starts.");
-      const note = typeof b.note === "string" ? b.note.trim().slice(0, 200) || null : null;
-      const r = await db.run(`UPDATE photos SET damage_note = $1 WHERE job_id = $2 AND slot = $3 AND kind = 'checkin' AND replaced_at IS NULL`, [note, job.id, String(slot)]);
-      if (!r.changes) throw bad("slot", "Take that photo first.");
-      return forJob(db, job.id);
+      return setDamage("job", job.id, slot, b);
     },
 
     // Serves a photo when the signed link is valid.

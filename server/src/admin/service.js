@@ -78,6 +78,9 @@ export function createAdmin({ db, jobs, photos, payments, now = () => Date.now()
         today: { completed: done.length, chargedCents: done.reduce((a, j) => a + (J(j.final, {}).chargeCents || 0), 0) },
         partnersActive: await n(`SELECT COUNT(*) AS n FROM partner_profiles WHERE status = 'active'`),
         customers: await n(`SELECT COUNT(*) AS n FROM users WHERE role = 'customer'`),
+        fleetsInReview: await n(`SELECT COUNT(*) AS n FROM fleets WHERE status = 'review'`),
+        fleetInvoicesPastDue: await n(`SELECT COUNT(*) AS n FROM fleet_invoices WHERE status = 'open' AND due_at < $1`, [now()]),
+        fleetRunsWaiting: await n(`SELECT COUNT(*) AS n FROM fleet_runs WHERE status = 'posted' AND window_start - 86400000 <= $1`, [now()]),
       };
     },
 

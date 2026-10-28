@@ -219,6 +219,31 @@ test("payouts: Stripe setup, instant cash-out with fee and new-partner reserve, 
   assert.equal(after.payouts[0].kind, "weekly");
 });
 
+test("fleets on card terms start right away and each visit's invoice is charged to the card", async () => {
+  await ok("POST", "/v1/fleet", cust, { name: "Reed Lawn Care", managerName: "Jordan Reed", billingEmail: "jordan@reedlawn.com", yardStreet: "88 Yard Rd", yardCity: "Knoxville", yardState: "TN", yardZip: "37919", yardHours: "Mon–Fri 7–5", checkinNotes: "Keys are in the shop office.", terms: "card", autoApproveCents: 0, poRequired: false }, 201);
+  const f = await ok("GET", "/v1/fleet", cust);
+  assert.equal(f.fleet.status, "active");
+  assert.equal(f.hasCard, true);
+  const v = (await ok("POST", "/v1/fleet/vehicles", cust, { unit: "Truck 1", year: 2020, make: "Ford", model: "F-250", vehicleClass: "van_pickup", mileage: 30000 }, 201)).vehicles[0];
+  const run = (await ok("POST", "/v1/fleet/runs", cust, { vehicleIds: [v.id], serviceIds: ["oil_change"], windowStart: clock + 5 * HOUR }, 201)).run;
+  await ok("PUT", "/v1/onboarding/steps/business", pa, { legalFirst: "Amanda", legalLast: "Smith" });
+  await ok("POST", "/v1/onboarding/sign", pa, { docId: "esign" });
+  await ok("POST", "/v1/onboarding/sign", pa, { docId: "fleet", name: "Amanda Smith" });
+  await ok("POST", `/v1/fleet-runs/${run.id}/claim`, pa);
+  clock = Math.max(clock, run.windowStart - HOUR);
+  const r = (await ok("POST", `/v1/fleet-runs/${run.id}/start`, pa)).run;
+  const rv = r.vehicles[0].id;
+  await ok("POST", `/v1/fleet-runs/${run.id}/vehicles/${rv}/check-in`, pa, { odometer: 30500 });
+  await ok("POST", `/v1/fleet-runs/${run.id}/vehicles/${rv}/done`, pa, { inspection: INSPECTION, notes: "Oil and filter changed. Next at 35,500." });
+  const before = Object.keys(stripe.state.intents).length;
+  await ok("POST", `/v1/fleet-runs/${run.id}/finish`, pa);
+  const inv = (await ok("GET", `/v1/fleet/runs/${run.id}`, cust)).run.invoice;
+  assert.equal(inv.status, "paid");
+  const pi = Object.values(stripe.state.intents).slice(before)[0];
+  assert.equal(pi.amount, inv.totalCents);
+  assert.equal(pi.status, "succeeded");
+});
+
 test("without Stripe nothing is charged, but partner earnings are still recorded", async () => {
   const off = await startTestApp({}, {});
   try {

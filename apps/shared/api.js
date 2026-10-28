@@ -127,6 +127,29 @@ export function createApi({ baseUrl = DEFAULT_API_URL, fetchImpl = globalThis.fe
     vehicleHistory: (token, id) => request("GET", `/v1/vehicles/${encodeURIComponent(id)}/history`, { token }),
     incidents: (token) => request("GET", "/v1/incidents", { token }),
     reportIncident: (token, body) => request("POST", "/v1/incidents", { token, body, timeout: 180_000 }),
+
+    // Fleet (business) accounts: the fleet manager side.
+    fleet: (token) => request("GET", "/v1/fleet", { token }),
+    createFleet: (token, body) => request("POST", "/v1/fleet", { token, body }),
+    updateFleet: (token, body) => request("PATCH", "/v1/fleet", { token, body }),
+    addFleetVehicle: (token, body) => request("POST", "/v1/fleet/vehicles", { token, body }),
+    updateFleetVehicle: (token, id, body) => request("PATCH", `/v1/fleet/vehicles/${encodeURIComponent(id)}`, { token, body }),
+    removeFleetVehicle: (token, id) => request("DELETE", `/v1/fleet/vehicles/${encodeURIComponent(id)}`, { token }),
+    fleetVehicleLog: (token, id) => request("GET", `/v1/fleet/vehicles/${encodeURIComponent(id)}/log`, { token }),
+    fleetEstimate: (token, body) => request("POST", "/v1/fleet/estimate", { token, body }),
+    postFleetRun: (token, body) => request("POST", "/v1/fleet/runs", { token, body }),
+    fleetRun: (token, id) => request("GET", `/v1/fleet/runs/${encodeURIComponent(id)}`, { token }),
+    cancelFleetRun: (token, id, body) => request("POST", `/v1/fleet/runs/${encodeURIComponent(id)}/cancel`, { token, body }),
+    fleetAddonDecision: (token, id, approve) => request("POST", `/v1/fleet/addons/${encodeURIComponent(id)}/${approve ? "approve" : "decline"}`, { token, body: {} }),
+    fleetInvoice: (token, id) => request("GET", `/v1/fleet/invoices/${encodeURIComponent(id)}`, { token }),
+    payFleetInvoice: (token, id) => request("POST", `/v1/fleet/invoices/${encodeURIComponent(id)}/pay`, { token, body: {} }),
+    // Fleet: the partner side.
+    fleetRuns: (token) => request("GET", "/v1/fleet-runs", { token }),
+    partnerFleetRun: (token, id) => request("GET", `/v1/fleet-runs/${encodeURIComponent(id)}`, { token }),
+    fleetRunAction: (token, id, action) => request("POST", `/v1/fleet-runs/${encodeURIComponent(id)}/${action}`, { token, body: {} }),
+    fleetVehicleAction: (token, id, rv, action, body) => request("POST", `/v1/fleet-runs/${encodeURIComponent(id)}/vehicles/${encodeURIComponent(rv)}/${action}`, { token, body: body || {} }),
+    fleetVehiclePhoto: (token, id, rv, body) => request("POST", `/v1/fleet-runs/${encodeURIComponent(id)}/vehicles/${encodeURIComponent(rv)}/photos`, { token, body, timeout: 120_000 }),
+    fleetVehicleDamage: (token, id, rv, slot, note) => request("POST", `/v1/fleet-runs/${encodeURIComponent(id)}/vehicles/${encodeURIComponent(rv)}/photos/${encodeURIComponent(slot)}/damage`, { token, body: { note } }),
   };
 }
 

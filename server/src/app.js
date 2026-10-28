@@ -20,6 +20,8 @@ import { createPhotos } from "./photos/service.js";
 import { photoRoutes } from "./photos/routes.js";
 import { createAdmin } from "./admin/service.js";
 import { adminRoutes } from "./admin/routes.js";
+import { createFleet } from "./fleet/service.js";
+import { fleetRoutes } from "./fleet/routes.js";
 
 export function createApp({ db, config, mailer = createMailer({ isProd: config.isProd }), log = console, vinFetch = config.vinLookup ? globalThis.fetch : null, mapsFetch = globalThis.fetch, stripeFetch = globalThis.fetch, now = () => Date.now() }) {
   const router = createRouter();
@@ -45,6 +47,8 @@ export function createApp({ db, config, mailer = createMailer({ isProd: config.i
   paymentRoutes(router, { auth, payments, jobs, config });
   onboardingRoutes(router, { auth, onboarding, config });
   photoRoutes(router, { auth, photos });
+  const fleet = createFleet({ db, settings, payments, photos, onboarding, geocode, requirePhotos: config.requireJobPhotos, now, log: (m) => (log.log ? log.log(m) : undefined) });
+  fleetRoutes(router, { auth, fleet });
   const admin = createAdmin({ db, jobs, photos, payments, now });
   adminRoutes(router, { auth, admin });
 
@@ -82,5 +86,5 @@ export function createApp({ db, config, mailer = createMailer({ isProd: config.i
   });
   server.requestTimeout = 15_000;
   server.headersTimeout = 10_000;
-  return { server, auth, mailer, settings, jobs, payments, onboarding, photos };
+  return { server, auth, mailer, settings, jobs, payments, onboarding, photos, fleet };
 }

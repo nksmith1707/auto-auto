@@ -60,6 +60,9 @@ function Routes() {
             <Stack.Screen name="chat" />
             <Stack.Screen name="payouts" />
             <Stack.Screen name="incident" />
+            <Stack.Screen name="fleet-runs" />
+            <Stack.Screen name="fleet-visit" />
+            <Stack.Screen name="fleet-vehicle" />
             <Stack.Screen name="onboarding/business" />
             <Stack.Screen name="onboarding/identity" />
             <Stack.Screen name="onboarding/background" />

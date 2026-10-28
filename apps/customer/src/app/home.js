@@ -174,6 +174,13 @@ export default function Home() {
             </View>
           ))}
         </View>
+        <Card onPress={() => router.push("/fleet")} accessibilityLabel="Business account" testID="open-fleet" style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+          <View style={{ flex: 1 }}>
+            <Text style={[t.text.body, { fontFamily: t.f.bodyB }]}>Business account</Text>
+            <Text style={t.text.hint}>Fleet vehicles, one visit for many, one invoice</Text>
+          </View>
+          <Text style={[t.text.body, { color: t.c.brand }]}>›</Text>
+        </Card>
         <Card onPress={() => router.push("/cards")} accessibilityLabel="Payment cards" testID="open-cards" style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
           <Text style={[t.text.body, { fontFamily: t.f.bodyB }]}>Payment cards</Text>
           <Text style={[t.text.body, { color: t.c.brand }]}>›</Text>

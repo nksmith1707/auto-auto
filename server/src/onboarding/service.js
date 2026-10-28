@@ -456,6 +456,8 @@ export function createOnboarding({ db, stripe = null, payments = null, now = () 
       return state(user.id);
     },
 
+    hasSigned: async (userId, docId) => !!(await currentSigs(userId))[docId],
+
     // Active partners can't take jobs while required insurance has expired (Liability agreement: "Jobs pause automatically if required coverage lapses").
     async coverageProblem(userId) {
       const a = await db.get(`SELECT answers FROM partner_applications WHERE user_id = $1`, [userId]);

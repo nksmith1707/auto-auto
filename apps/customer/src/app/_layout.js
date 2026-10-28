@@ -67,6 +67,12 @@ function Routes() {
             <Stack.Screen name="job" />
             <Stack.Screen name="chat" />
             <Stack.Screen name="history" />
+            <Stack.Screen name="fleet" />
+            <Stack.Screen name="fleet-vehicle" />
+            <Stack.Screen name="fleet-log" />
+            <Stack.Screen name="fleet-request" />
+            <Stack.Screen name="fleet-run" />
+            <Stack.Screen name="fleet-invoice" />
             <Stack.Screen name="cards" />
           </Stack.Protected>
           <Stack.Protected guard={!signedIn}>

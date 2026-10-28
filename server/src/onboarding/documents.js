@@ -120,6 +120,21 @@ const DOCS = [
   },
 ];
 
+
+// Signed from the partner app to join the fleet program (not part of the first application).
+DOCS.push({
+  id: "fleet", title: "Fleet Service Addendum", version: "0.1", kind: "agreement",
+  paragraphs: [
+    ["Contract rates", "Fleet visits are priced by book time at the fleet's labor rate (usually $85/hr instead of $100, because you service several vehicles in one trip), plus parts at cost + 10%. The platform fee comes out of labor only. The trip fee for each visit is yours."],
+    ["Parts", "Parts for a fleet visit are reimbursed at cost with your payout, the same as other jobs."],
+    ["Billing", "Auto-Auto invoices the fleet (net 30 or the fleet's card on file) and carries the collection risk. You're paid on your normal payout schedule after the visit is complete, whether or not the fleet has paid yet."],
+    ["Proof of work", "Every vehicle needs 12 check-in photos, an odometer reading, 2 after photos, an inspection report, and a note for the fleet's maintenance log."],
+    ["Add-ons", "Fleets set an amount per vehicle that add-ons are approved automatically up to. Anything above it waits for the fleet manager's approval in the app. Never do unapproved work."],
+    ["Releasing a visit", "Releasing more than 24 hours before the start is free. Inside 24 hours it counts as a late cancel, the same as any job."],
+    ["Business yards", "Follow the fleet's check-in instructions, stay in the areas they allow, and leave keys exactly as you found them. Report any damage in the app within 24 hours."],
+  ],
+});
+
 // The six agreements every partner signs in the Agreements step.
 export const AGREEMENT_IDS = ["ica", "liab", "pay", "privacy", "safety", "arb"];
 

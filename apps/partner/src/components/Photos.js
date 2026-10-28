@@ -55,7 +55,8 @@ function Slot({ label, photo, onPress, busy, testID }) {
 }
 
 // slots: [[slot, label]]. photos: the job's current photos for this group. allowDamage: check-in only.
-export function PhotoGrid({ jobId, slots, photos, onChange, allowDamage, testPrefix = "photo" }) {
+// upload/note default to job photos; fleet vehicles pass their own.
+export function PhotoGrid({ jobId, slots, photos, onChange, allowDamage, testPrefix = "photo", upload, note: saveNoteFn }) {
   const { call } = useAuth();
   const [busy, setBusy] = useState(null);
   const [open, setOpen] = useState(null); // slot being reviewed
@@ -69,7 +70,7 @@ export function PhotoGrid({ jobId, slots, photos, onChange, allowDamage, testPre
       const shot = await takePhoto({ library });
       if (!shot) return;
       setBusy(slot);
-      const r = await call("uploadJobPhoto", jobId, { slot, ...shot });
+      const r = upload ? await upload({ slot, ...shot }) : await call("uploadJobPhoto", jobId, { slot, ...shot });
       onChange(r.photos);
       setOpen(null);
     } catch (e) { setErr(e.fields ? Object.values(e.fields)[0] : e.message); }
@@ -78,7 +79,7 @@ export function PhotoGrid({ jobId, slots, photos, onChange, allowDamage, testPre
   async function saveNote(slot) {
     setErr(null);
     setBusy(slot);
-    try { onChange((await call("noteDamage", jobId, slot, note)).photos); setOpen(null); } catch (e) { setErr(e.message); }
+    try { onChange((saveNoteFn ? await saveNoteFn(slot, note) : await call("noteDamage", jobId, slot, note)).photos); setOpen(null); } catch (e) { setErr(e.message); }
     finally { setBusy(null); }
   }
 

@@ -99,11 +99,11 @@ async function start() {
   if (VIEWS.some((v) => v[0] === hash)) S.v = hash;
   render();
   // Badge counts for the sidebar.
-  api("GET", "/v1/admin/overview").then((o) => { counts = { apps: o.applications, incidents: o.incidentsOpen, jobs: o.jobsLate + o.paymentProblems, insurance: o.insuranceExpired, payouts: o.payoutsFailed }; side(); }).catch(() => {});
+  api("GET", "/v1/admin/overview").then((o) => { counts = { apps: o.applications, incidents: o.incidentsOpen, jobs: o.jobsLate + o.paymentProblems, insurance: o.insuranceExpired, payouts: o.payoutsFailed, fleet: o.fleetsInReview + o.fleetInvoicesPastDue }; side(); }).catch(() => {});
 }
 
 // ---------- Layout ----------
-const VIEWS = [["overview", "Overview"], ["jobs", "Jobs"], ["apps", "Applications"], ["partners", "Partners"], ["incidents", "Incidents"], ["insurance", "Insurance"], ["payouts", "Payouts"], ["pricing", "Pricing & rules"]];
+const VIEWS = [["overview", "Overview"], ["jobs", "Jobs"], ["apps", "Applications"], ["partners", "Partners"], ["fleet", "Fleet & invoices"], ["incidents", "Incidents"], ["insurance", "Insurance"], ["payouts", "Payouts"], ["pricing", "Pricing & rules"]];
 let counts = {};
 
 function side() {
@@ -159,7 +159,7 @@ const BIND = {};
 // ---------- Overview ----------
 V.overview = async () => {
   const o = await api("GET", "/v1/admin/overview");
-  counts = { apps: o.applications, incidents: o.incidentsOpen, jobs: o.jobsLate + o.paymentProblems, insurance: o.insuranceExpired, payouts: o.payoutsFailed };
+  counts = { apps: o.applications, incidents: o.incidentsOpen, jobs: o.jobsLate + o.paymentProblems, insurance: o.insuranceExpired, payouts: o.payoutsFailed, fleet: o.fleetsInReview + o.fleetInvoicesPastDue };
   side();
   const att = [
     [o.applications, "brand", `${o.applications} application${o.applications === 1 ? "" : "s"} waiting for a decision`, "apps"],
@@ -169,6 +169,9 @@ V.overview = async () => {
     [o.insuranceExpired, "bad", `${o.insuranceExpired} partner polic${o.insuranceExpired === 1 ? "y has" : "ies have"} expired (those partners can't take jobs)`, "insurance"],
     [o.insuranceExpiring, "warn", `${o.insuranceExpiring} polic${o.insuranceExpiring === 1 ? "y expires" : "ies expire"} within 30 days`, "insurance"],
     [o.partnersFlagged, "warn", `${o.partnersFlagged} partner${o.partnersFlagged === 1 ? "" : "s"} flagged for review (late cancels)`, "partners"],
+    [o.fleetsInReview, "brand", `${o.fleetsInReview} business account${o.fleetsInReview === 1 ? "" : "s"} waiting for a credit check`, "fleet|accounts"],
+    [o.fleetRunsWaiting, "bad", `${o.fleetRunsWaiting} fleet visit${o.fleetRunsWaiting === 1 ? "" : "s"} within 24 hours with no partner yet`, "fleet|runs"],
+    [o.fleetInvoicesPastDue, "warn", `${o.fleetInvoicesPastDue} fleet invoice${o.fleetInvoicesPastDue === 1 ? "" : "s"} past due`, "fleet|invoices"],
     [o.payoutsFailed, "bad", `${o.payoutsFailed} payout${o.payoutsFailed === 1 ? "" : "s"} failed this week`, "payouts"],
   ].filter((x) => x[0]);
   return `<div class="ph"><div><h1>Today</h1><p>What needs attention first. Everything here is live.</p></div></div>
@@ -427,6 +430,84 @@ V.payouts = async () => {
   <div class="card"><div class="card-h"><h2>Recent payouts</h2></div><div class="tw"><table><thead><tr><th>Partner</th><th>Kind</th><th class="r">Amount</th><th class="r">Fee</th><th>Status</th><th>When</th></tr></thead><tbody>
   ${r.payouts.map((p) => `<tr><td>${esc(p.partner)}</td><td>${esc(p.kind)}</td><td class="r">${money(p.amountCents)}</td><td class="r">${money(p.feeCents)}</td><td>${p.status === "paid" ? pill("Paid", "ok") : pill(`Failed${p.error ? `: ${p.error}` : ""}`, "bad")}</td><td>${when(p.at)}</td></tr>`).join("") || `<tr><td colspan="6" class="empty">No payouts yet.</td></tr>`}
   </tbody></table></div></div>`;
+};
+
+// ---------- Fleet & invoices ----------
+const F_STATUS = { review: ["Credit check", "brand"], active: ["Active", "ok"], declined: ["Declined", "bad"], paused: ["Paused", "warn"] };
+const R_STATUS = { posted: ["Looking for partner", "brand"], claimed: ["Claimed", ""], active: ["In progress", "warn"], completed: ["Completed", "ok"], cancelled: ["Cancelled", ""] };
+V.fleet = async () => {
+  const t = tabOf("fleet", "accounts");
+  const head = `<div class="ph"><div><h1>Fleet & invoices</h1><p>Business accounts (net 30 needs a credit check), their visits, and invoices. Partners are paid whether or not a fleet has paid.</p></div></div>
+  ${tabs("fleet", [["accounts", "Accounts"], ["invoices", "Open invoices"], ["paid", "Paid invoices"], ["runs", "Visits"]])}`;
+  if (t === "accounts") {
+    const list = (await api("GET", "/v1/admin/fleets")).fleets;
+    return `${head}<div class="tw"><table><thead><tr><th>Fleet</th><th>Status</th><th>Terms</th><th class="r">Vehicles</th><th class="r">Open</th><th class="r">Past due</th></tr></thead><tbody>
+    ${list.map((f) => `<tr class="click" data-fleet="${esc(f.id)}"><td><b>${esc(f.name)}</b><br><span class="muted">${esc(f.managerName)} · ${esc(f.ownerEmail)}</span></td><td>${pill(...F_STATUS[f.status])}</td><td>${f.terms === "net30" ? `Net 30 · ${money(f.creditLimitCents)} limit` : "Card on file"}</td><td class="r">${f.vehicles}</td><td class="r">${money(f.openInvoicesCents)}</td><td class="r">${f.pastDueCents ? `<span style="color:var(--bad)">${money(f.pastDueCents)}</span>` : "—"}</td></tr>`).join("") || `<tr><td colspan="6" class="empty">No business accounts yet.</td></tr>`}
+    </tbody></table></div>`;
+  }
+  if (t === "runs") {
+    const runs = (await api("GET", "/v1/admin/fleet-runs")).runs;
+    return `${head}<div class="tw"><table><thead><tr><th>Visit</th><th>Fleet</th><th>When</th><th>Partner</th><th>Status</th><th class="r">Estimate</th></tr></thead><tbody>
+    ${runs.map((r) => `<tr class="click" data-frun="${esc(r.id)}"><td>#${r.number} · ${r.vehicles.length} vehicles</td><td>${esc(r.fleet.name)}</td><td>${when(r.windowStart)}</td><td>${esc(r.partner ? r.partner.name : "—")}</td><td>${pill(...R_STATUS[r.status])}</td><td class="r">${money(r.invoice ? r.invoice.totalCents : r.estimateCents)}</td></tr>`).join("") || `<tr><td colspan="6" class="empty">No fleet visits yet.</td></tr>`}
+    </tbody></table></div>`;
+  }
+  const inv = (await api("GET", `/v1/admin/fleet-invoices?status=${t === "paid" ? "paid" : "open"}`)).invoices;
+  return `${head}<div class="tw"><table><thead><tr><th>Invoice</th><th>Fleet</th><th>Issued</th><th>Due</th><th class="r">Total</th><th>Status</th><th></th></tr></thead><tbody>
+  ${inv.map((i) => `<tr><td>INV-${i.number}${i.po ? `<br><span class="muted">${esc(i.po)}</span>` : ""}</td><td>${esc(i.fleet)}</td><td>${day(i.issuedAt)}</td><td>${day(i.dueAt)}</td><td class="r">${money(i.totalCents)}</td>
+    <td>${i.status === "paid" ? pill("Paid", "ok") : i.pastDue ? pill("Past due", "bad") : pill("Open", "warn")}${i.paidNote ? `<br><span class="muted">${esc(i.paidNote)}</span>` : ""}${i.paymentError && i.status === "open" ? `<br><span class="muted">${esc(i.paymentError)}</span>` : ""}</td>
+    <td>${i.status === "open" ? `<button class="btn" data-markpaid="${esc(i.id)}">Mark paid</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="7" class="empty">No invoices here.</td></tr>`}
+  </tbody></table></div>`;
+};
+BIND.fleet = async (main) => {
+  $$("[data-markpaid]", main).forEach((b) => {
+    b.onclick = () => drawer(`${dh("Mark invoice paid")}<div class="field"><label for="pnote">How it was paid</label><input class="input" id="pnote" placeholder="Check #4471, or ACH reference"></div><div class="err" id="perr3" hidden></div><button class="btn primary" id="pgo">Mark paid</button>`, (d) => {
+      $("#pgo", d).onclick = async () => {
+        try { await api("POST", `/v1/admin/fleet-invoices/${encodeURIComponent(b.dataset.markpaid)}/paid`, { note: $("#pnote", d).value }); toast("Invoice marked paid"); closeDrawer(); render(); }
+        catch (e) { const er = $("#perr3", d); er.textContent = errText(e); er.hidden = false; }
+      };
+    });
+  });
+  $$("[data-frun]", main).forEach((tr) => {
+    tr.onclick = async () => {
+      drawer(dh("Loading…"));
+      const r = (await api("GET", `/v1/admin/fleet-runs/${encodeURIComponent(tr.dataset.frun)}`)).run;
+      drawer(`${dh(`Fleet visit #${r.number}`, `${esc(r.fleet.name)} · ${pill(...R_STATUS[r.status])}`)}
+        <div class="kv"><span>When</span><b>${when(r.windowStart)}</b><span>Yard</span><b>${esc(r.fleet.yard.street)}, ${esc(r.fleet.yard.city)}</b><span>Partner</span><b>${esc(r.partner ? r.partner.name : "—")}</b><span>PO</span><b>${esc(r.po || "—")}</b>
+        <span>${r.invoice ? "Invoice" : "Estimate"}</span><b>${r.invoice ? `INV-${r.invoice.number} · ${money(r.invoice.totalCents)} · ${esc(r.invoice.status)}` : money(r.estimateCents)}</b></div>
+        ${r.vehicles.map((v) => `<div class="sec"><h3>${esc(v.unit)} · ${esc(v.year)} ${esc(v.make)} ${esc(v.model)} ${pill(v.status)}</h3>
+          <div class="muted">${esc(v.lines.map((l) => l.name).join(", "))}${v.addons.length ? ` · add-ons: ${esc(v.addons.map((a) => `${a.name} (${a.status})`).join(", "))}` : ""}${v.odometer != null ? ` · ${Number(v.odometer).toLocaleString("en-US")} mi` : ""}</div>
+          ${v.notes ? `<div class="note">${esc(v.notes)}</div>` : ""}${v.skipReason ? `<div class="note warn">Not serviced: ${esc(v.skipReason)}</div>` : ""}
+          ${v.photos && (v.photos.checkin.length || v.photos.after.length) ? thumbs([...v.photos.checkin, ...v.photos.after]) : ""}</div>`).join("")}`);
+    };
+  });
+  const list = $$("[data-fleet]", main).length ? (await api("GET", "/v1/admin/fleets")).fleets : [];
+  $$("[data-fleet]", main).forEach((tr) => {
+    tr.onclick = () => {
+      const f = list.find((x) => x.id === tr.dataset.fleet);
+      drawer(`${dh(f.name, `${esc(f.managerName)} · ${esc(f.ownerEmail)} · ${pill(...F_STATUS[f.status])}`)}
+        <div class="kv"><span>Terms</span><b>${f.terms === "net30" ? "Net 30" : "Card on file"}</b><span>Credit limit</span><b>${money(f.creditLimitCents)}</b><span>Labor rate</span><b>$${esc(f.laborRate)}/hr</b>
+        <span>Open invoices</span><b>${money(f.openInvoicesCents)}${f.pastDueCents ? ` · ${money(f.pastDueCents)} past due` : ""}</b><span>Vehicles</span><b>${f.vehicles}</b>
+        <span>Yard</span><b>${esc(f.yard.street)}, ${esc(f.yard.city)} ${esc(f.yard.state)} ${esc(f.yard.zip)}</b><span>Billing</span><b>${esc(f.billingEmail)}</b><span>Applied</span><b>${day(f.createdAt)}</b></div>
+        ${f.decisionNote ? `<div class="note">${esc(f.decisionNote)}</div>` : ""}
+        <div class="sec"><h3>Terms and decision</h3>
+          <div class="row"><div class="field" style="flex:1"><label for="fcl">Credit limit ($)</label><input class="input num" id="fcl" type="number" min="0" value="${f.creditLimitCents / 100}"></div>
+          <div class="field" style="flex:1"><label for="flr">Labor rate ($/hr)</label><input class="input num" id="flr" type="number" min="1" value="${esc(f.laborRate)}"></div></div>
+          <textarea class="input" id="fnote" placeholder="Note (required to decline or pause; the fleet manager sees it)"></textarea>
+          <div class="err" id="ferr" hidden></div>
+          <div class="btns">${f.status !== "active" ? `<button class="btn ok" data-fdec="${f.status === "review" ? "approve" : "reactivate"}">${f.status === "review" ? "Approve" : "Reactivate"}</button>` : `<button class="btn" data-fdec="update">Save terms</button>`}
+          ${f.status === "review" ? `<button class="btn danger" data-fdec="decline">Decline</button>` : ""}${f.status === "active" ? `<button class="btn" data-fdec="pause">Pause</button>` : ""}</div>
+          <p class="muted" style="margin:0;font-size:12px">Net 30: run a business credit check before approving, and set the limit from it.</p></div>`, (d) => {
+        $$("[data-fdec]", d).forEach((b) => {
+          b.onclick = async () => {
+            try {
+              await api("POST", `/v1/admin/fleets/${encodeURIComponent(f.id)}/decision`, { decision: b.dataset.fdec, creditLimitCents: Math.round(Number($("#fcl", d).value) * 100), laborRate: Number($("#flr", d).value), note: $("#fnote", d).value });
+              toast("Fleet account updated"); closeDrawer(); render();
+            } catch (e) { const er = $("#ferr", d); er.textContent = errText(e); er.hidden = false; }
+          };
+        });
+      });
+    };
+  });
 };
 
 // ---------- Pricing & rules ----------
