@@ -181,7 +181,8 @@ export function createPhotos({ db, secret = randomBytes(32).toString("hex"), now
       const r = await db.get(`SELECT * FROM incidents WHERE id = $1`, [id]);
       if (!r) throw new HttpError(404, "not_found", "That report doesn't exist.");
       const photos = await db.all(`SELECT * FROM photos WHERE incident_id = $1 ORDER BY slot`, [id]);
-      return { id: r.id, reporterId: r.reporter_id, jobId: r.job_id, type: r.type, typeLabel: INCIDENT_TYPES[r.type], description: r.description, status: r.status, staffNote: r.staff_note, createdAt: r.created_at, photos: photos.map(photoOut) };
+      const who = await db.get(`SELECT first_name, last_name FROM users WHERE id = $1`, [r.reporter_id]);
+      return { id: r.id, reporterId: r.reporter_id, reporter: who ? `${who.first_name} ${who.last_name}` : null, jobId: r.job_id, type: r.type, typeLabel: INCIDENT_TYPES[r.type], description: r.description, status: r.status, staffNote: r.staff_note, createdAt: r.created_at, photos: photos.map(photoOut) };
     },
     async myIncidents(user) {
       const rows = await db.all(`SELECT id FROM incidents WHERE reporter_id = $1 ORDER BY created_at DESC LIMIT 50`, [user.id]);

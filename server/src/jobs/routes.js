@@ -103,7 +103,12 @@ export function jobRoutes(router, { db, auth, jobs, now = () => Date.now() }) {
       `SELECT u.id, u.email, u.first_name, u.last_name, u.phone, u.created_at, p.status, p.status_reason, p.review_reason
        FROM users u JOIN partner_profiles p ON p.user_id = u.id ORDER BY u.created_at DESC LIMIT 500`,
     );
-    send(res, 200, { partners: rows.map((r) => ({ id: r.id, email: r.email, name: `${r.first_name} ${r.last_name}`, phone: r.phone, createdAt: r.created_at, status: r.status, statusReason: r.status_reason, reviewReason: r.review_reason })) });
+    // Jobs done, late cancels in the last 30 days, and where each partner works, for the Ops Console.
+    const done = new Map((await db.all(`SELECT partner_id, COUNT(*) AS n FROM jobs WHERE status = 'completed' AND partner_id IS NOT NULL GROUP BY partner_id`)).map((x) => [x.partner_id, Number(x.n)]));
+    const late = new Map((await db.all(`SELECT actor_id, COUNT(*) AS n FROM job_events WHERE kind = 'partner_late_cancel' AND created_at > $1 GROUP BY actor_id`, [now() - 30 * 86_400_000])).map((x) => [x.actor_id, Number(x.n)]));
+    const areas = new Map((await db.all(`SELECT user_id, city, state, radius_miles FROM partner_service_areas`)).map((x) => [x.user_id, `${x.city}, ${x.state} · ${x.radius_miles} mi`]));
+    send(res, 200, { partners: rows.map((r) => ({ id: r.id, email: r.email, name: `${r.first_name} ${r.last_name}`, phone: r.phone, createdAt: r.created_at, status: r.status, statusReason: r.status_reason, reviewReason: r.review_reason,
+      jobsDone: done.get(r.id) || 0, lateCancels30d: late.get(r.id) || 0, area: areas.get(r.id) || null })) });
   });
 
   router.post("/v1/admin/partners/:id/status", async (req, res) => {

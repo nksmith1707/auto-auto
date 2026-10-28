@@ -18,6 +18,8 @@ import { createOnboarding } from "./onboarding/service.js";
 import { onboardingRoutes } from "./onboarding/routes.js";
 import { createPhotos } from "./photos/service.js";
 import { photoRoutes } from "./photos/routes.js";
+import { createAdmin } from "./admin/service.js";
+import { adminRoutes } from "./admin/routes.js";
 
 export function createApp({ db, config, mailer = createMailer({ isProd: config.isProd }), log = console, vinFetch = config.vinLookup ? globalThis.fetch : null, mapsFetch = globalThis.fetch, stripeFetch = globalThis.fetch, now = () => Date.now() }) {
   const router = createRouter();
@@ -43,6 +45,8 @@ export function createApp({ db, config, mailer = createMailer({ isProd: config.i
   paymentRoutes(router, { auth, payments, jobs, config });
   onboardingRoutes(router, { auth, onboarding, config });
   photoRoutes(router, { auth, photos });
+  const admin = createAdmin({ db, jobs, photos, payments, now });
+  adminRoutes(router, { auth, admin });
 
   const server = http.createServer(async (req, res) => {
     const origin = req.headers.origin;

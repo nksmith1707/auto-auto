@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Auto-Auto Ops Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="/ops/console.css">
+</head>
+<body>
+<header class="top" id="top" hidden>
+  <div class="logo">Auto-Auto<span>OPS</span></div>
+  <input class="search" id="gsearch" placeholder="Search jobs by customer, partner, or service" aria-label="Search jobs">
+  <span class="who" id="who"></span>
+  <button class="btn" id="signout" style="background:#ffffff1a;border-color:#ffffff26;color:#fff;padding:7px 10px">Log out</button>
+</header>
+<div class="shell" id="shell" hidden><nav class="side" id="side" aria-label="Sections"></nav><main class="main" id="main"></main></div>
+<div id="login" hidden></div>
+<div id="layer"></div>
+<script src="/ops/app.js"></script>
+</body>
+</html>

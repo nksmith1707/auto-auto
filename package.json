@@ -15,6 +15,7 @@
     "test": "npm test --workspace server",
     "migrate": "npm run migrate --workspace server",
     "partner-status": "npm run partner-status --workspace server --",
-    "partner-review": "npm run partner-review --workspace server --"
+    "partner-review": "npm run partner-review --workspace server --",
+    "create-admin": "npm run create-admin --workspace server --"
   }
 }

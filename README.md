@@ -86,6 +86,20 @@ Set `STRIPE_SECRET_KEY` on the server (Render → the API service → Environmen
 - **Test mode:** use card 4242 4242 4242 4242 with any future date, any CVC, any ZIP. Payouts in test mode need test money in the platform balance first: charge test card 4000 0000 0000 0077 once (its funds are available right away).
 - Not yet: parts cards (Stripe Issuing needs approval from Stripe), webhooks (the app checks status when people return from Stripe's pages).
 
+## Ops Console (staff website)
+
+Open **https://auto-auto-api.onrender.com/ops** in a browser and log in with a staff account.
+
+Make a staff account in the Render shell (staff can't sign up in the apps). Use a long password:
+
+```
+ADMIN_PASSWORD='a long password here' npm run create-admin -- you@yourcompany.com First Last
+```
+
+Running it again for the same email sets a new password. Customer and partner accounts can't log in to the console.
+
+Sections: **Overview** (what needs attention), **Jobs** (live, waiting, partner late, card declined, completed; each job's full record), **Applications** (review documents, record the background check, approve, send back with a note, or deny), **Partners** (pause, reactivate, deactivate), **Incidents** (close with a note), **Insurance** (expirations), **Payouts** (balances and recent payouts), **Pricing & rules** (change numbers and publish a new version with a note).
+
 ## Photos and proof of work
 
 - **Check-in:** after "I've arrived", the partner takes 12 photos (8 around the outside, 4 inside, including the dash and odometer). Tapping a photo lets them note existing damage. Work can't start until all 12 are in and the odometer is entered.
@@ -173,6 +187,11 @@ All requests and responses are JSON. Signed-in requests send `Authorization: Bea
 | GET, POST | `/v1/incidents` | Partners. Their reports and the jobs they can report on; or a new report: `type`, `jobId`, `description`, `photos` (up to 4) |
 | GET | `/v1/admin/incidents?status=open` | Staff. Incident reports |
 | POST | `/v1/admin/incidents/:id/close` | Staff. Body: `note` |
+| GET | `/v1/admin/overview` | Staff. Counts for what needs attention |
+| GET | `/v1/admin/jobs?filter=&q=` | Staff. Jobs: `open`, `live`, `waiting`, `late`, `payment`, `completed`, `cancelled`, `all`; `q` searches names and services |
+| GET | `/v1/admin/jobs/:id` | Staff. One job with contacts, full address, photos, money, incidents, and timeline |
+| GET | `/v1/admin/insurance` | Staff. Every partner policy with its expiration and certificate status |
+| GET | `/v1/admin/payouts` | Staff. Partner balances and recent payouts |
 | GET | `/v1/payouts` | Partners. Balance, reserve, schedule, payouts, and activity |
 | POST | `/v1/payouts/account` | Partners. Body: `returnUrl`. Returns Stripe's payout setup `url` |
 | POST | `/v1/payouts/account/sync` | Partners. Checks whether payout setup is finished |
