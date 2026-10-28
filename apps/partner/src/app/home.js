@@ -4,7 +4,7 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "r
 import { useFocusEffect, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { formatPhone, money } from "../../../shared/api";
-import { fmtLeft, fmtWindow } from "../../../shared/format";
+import { fmtDay, fmtLeft, fmtWhen, fmtWindow } from "../../../shared/format";
 import { useAuth } from "../../../shared/session";
 import { Button, LinkButton, Notice } from "../../../shared/ui";
 import { Bell } from "../../../shared/Notifications";
@@ -25,7 +25,7 @@ const CHIP = {
   money: { bg: p.moneySoft, fg: p.money }, brand: { bg: p.brandSoft, fg: p.brandText }, ok: { bg: p.okSoft, fg: p.ok }, bad: { bg: p.badSoft, fg: p.bad },
 };
 
-function Step({ n, title, sub, done, onPress, testID }) {
+function Step({ n, title, sub, done, onPress, testID, cta = "START" }) {
   const body = (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: onPress ? 6 : 0 }}>
       <View style={[styles.dot, done ? { backgroundColor: p.ok, borderColor: p.ok } : onPress ? { borderColor: p.money } : null]}>
@@ -35,7 +35,7 @@ function Step({ n, title, sub, done, onPress, testID }) {
         <Text style={{ fontFamily: done || onPress ? fonts.bodyB : fonts.body, fontSize: 14, color: done || onPress ? p.ink : p.muted }}>{title}</Text>
         {sub ? <Text style={{ fontFamily: fonts.body, fontSize: 12, color: p.muted }}>{sub}</Text> : null}
       </View>
-      {done ? <Text style={{ fontFamily: fonts.bodyX, fontSize: 11, color: p.ok }}>{onPress ? "EDIT" : "DONE"}</Text> : onPress ? <Text style={{ fontFamily: fonts.bodyX, fontSize: 11, color: p.money }}>START ›</Text> : null}
+      {done ? <Text style={{ fontFamily: fonts.bodyX, fontSize: 11, color: p.ok }}>{onPress ? "EDIT" : "DONE"}</Text> : onPress ? <Text style={{ fontFamily: fonts.bodyX, fontSize: 11, color: p.money }}>{cta} ›</Text> : null}
     </View>
   );
   if (!onPress) return body;
@@ -53,10 +53,10 @@ function JobList({ title, jobs, empty, onOpen, board }) {
           style={({ pressed }) => [styles.card, { gap: 4, padding: 14 }, pressed && { borderColor: p.brand }]}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             <Text style={{ flex: 1, fontFamily: fonts.displayX, fontSize: 16, color: p.ink }} numberOfLines={1}>{j.services.map((x) => x.name).concat(j.pendingQuotes.map((x) => x.name)).join(", ")}</Text>
-            <Text style={{ fontFamily: fonts.displayX, fontSize: 16, color: p.money }}>{money((j.final ? j.final.partnerPay : j.pay).earningsCents)}</Text>
+            <Text style={{ fontFamily: fonts.displayX, fontSize: 16, color: p.money }}>{money((j.final ? j.final.partnerPay : j.pay).earningsCents)}{j.tipCents ? ` + ${money(j.tipCents)} tip` : ""}</Text>
           </View>
           <Text style={{ fontFamily: fonts.body, fontSize: 13, color: p.muted }}>
-            {KIND[j.kind] ? `${KIND[j.kind]} · ` : ""}{j.kind === "scheduled" ? fmtWindow(j.windowStart, j.windowEnd) : `open ${fmtLeft(j.requestExpiresAt - Date.now())} more`} · {j.area}{j.distanceMiles != null ? ` · ${j.distanceMiles} mi` : ""}
+            {KIND[j.kind] ? `${KIND[j.kind]} · ` : ""}{j.kind === "scheduled" ? fmtWindow(j.windowStart, j.windowEnd) : j.status === "requested" ? `open ${fmtLeft(j.requestExpiresAt - Date.now())} more` : fmtDay(j.windowStart)} · {j.area}{j.distanceMiles != null ? ` · ${j.distanceMiles} mi` : ""}
           </Text>
           <Text style={{ fontFamily: fonts.bodyB, fontSize: 12, color: j.warranty ? p.money : board ? p.brandText : p.ok }}>{j.warranty ? (j.warranty.original ? "Warranty return · your customer · " : "Warranty return · ") : ""}{board ? `${j.vehicle.year} ${j.vehicle.make} ${j.vehicle.model}` : STATUS_TXT[j.status]}</Text>
         </Pressable>
@@ -99,8 +99,11 @@ export default function Home() {
   }
   // Pick up changes made on other screens.
   const [application, setApplication] = useState(null);
+  // Damage claims waiting for this partner's side (48 hours to respond).
+  const [claimsDue, setClaimsDue] = useState([]);
+  const loadClaims = useCallback(async () => { try { setClaimsDue((await call("claims")).claims.filter((c) => c.status === "partner")); } catch { /* shown next time */ } }, [call]);
   const loadApplication = useCallback(async () => { try { setApplication(await call("onboarding")); } catch { /* checklist waits for the next refresh */ } }, [call]);
-  useFocusEffect(useCallback(() => { refresh().catch(() => {}); loadJobs(); loadApplication(); }, [refresh, loadJobs, loadApplication]));
+  useFocusEffect(useCallback(() => { refresh().catch(() => {}); loadJobs(); loadApplication(); loadClaims(); }, [refresh, loadJobs, loadApplication, loadClaims]));
   // Once per launch: make sure this phone can get alerts (job offers last only 30 seconds).
   useFocusEffect(useCallback(() => { if (!askedForPush) { askedForPush = true; registerPush(call).catch(() => {}); } }, [call]));
   const [confirmAll, setConfirmAll] = useState(false);
@@ -161,6 +164,14 @@ export default function Home() {
 
           {active ? (
             <View style={{ gap: 14, marginBottom: 14 }}>
+              {claimsDue.map((c) => (
+                <Pressable key={c.id} onPress={() => router.push({ pathname: "/claim", params: { id: c.id } })} accessibilityRole="button" testID="claim-due"
+                  style={[styles.card, { borderColor: p.bad, borderWidth: 2, gap: 4 }]}>
+                  <Text style={[styles.label, { color: p.bad }]}>Respond by {fmtWhen(c.responseDueAt)}</Text>
+                  <Text style={{ fontFamily: fonts.displayX, fontSize: 17, color: p.ink }}>Damage claim {c.number}</Text>
+                  <Text style={{ fontFamily: fonts.body, fontSize: 13, color: p.muted }}>{c.customer} · {c.job.services.join(", ")}. Give your side before we decide. Tap to respond ›</Text>
+                </Pressable>
+              ))}
               {jobs.blocked ? <Notice tone="bad">{jobs.blocked}</Notice> : null}
               <JobList title="Your jobs" empty="No jobs yet. Accept one below." jobs={(jobs.mine || []).filter((j) => !["completed", "cancelled", "expired"].includes(j.status))} onOpen={(id) => router.push({ pathname: "/job", params: { id } })} />
               <JobList title="Open jobs" empty={jobs.board ? "No open jobs for your services right now. Pull down to refresh." : "Loading…"} jobs={jobs.board || []} onOpen={(id) => router.push({ pathname: "/job", params: { id } })} board />
@@ -171,11 +182,11 @@ export default function Home() {
                 <Step n={1} title="Service area" sub={user.partner.serviceAreaSet ? "Set" : "Where you'll travel for jobs"} done={!!user.partner.serviceAreaSet} onPress={() => router.push("/service-area")} />
                 <Step n={2} title="Services you offer" sub={`${user.partner.servicesCount} turned on`} done={!!user.partner.servicesCount} onPress={() => router.push("/services")} />
                 <Step n={3} title="Payouts" sub="Balance, cash out, and where we send your money" done={!!user.partner.payoutsEnabled} onPress={() => router.push("/payouts")} testID="step-payouts" />
-                <Step n={4} title="Insurance & documents" sub="Renew certificates before they expire" done={false} onPress={() => router.push("/onboarding/insurance")} testID="step-insurance-active" />
-                <Step n={5} title="Fleet visits" sub="Several company vehicles in one trip, at a business yard" done={false} onPress={() => router.push("/fleet-runs")} testID="open-fleet-runs" />
-                <Step n={6} title="Ratings & reviews" sub="Your average, what customers say, and tips" done={false} onPress={() => router.push("/reviews")} testID="open-reviews" />
-                <Step n={7} title="Claims" sub="Damage reports about your jobs. Respond within 48 hours" done={false} onPress={() => router.push("/claims")} testID="open-claims" />
-                <Step n={8} title="Report an incident" sub="Damage, injuries, or unsafe situations, within 24 hours" done={false} onPress={() => router.push("/incident")} testID="open-incident" />
+                <Step n={4} cta="OPEN" title="Insurance & documents" sub="Renew certificates before they expire" done={false} onPress={() => router.push("/onboarding/insurance")} testID="step-insurance-active" />
+                <Step n={5} cta="OPEN" title="Fleet visits" sub="Several company vehicles in one trip, at a business yard" done={false} onPress={() => router.push("/fleet-runs")} testID="open-fleet-runs" />
+                <Step n={6} cta="OPEN" title="Ratings & reviews" sub="Your average, what customers say, and tips" done={false} onPress={() => router.push("/reviews")} testID="open-reviews" />
+                <Step n={7} cta="OPEN" title="Claims" sub="Damage reports about your jobs. Respond within 48 hours" done={false} onPress={() => router.push("/claims")} testID="open-claims" />
+                <Step n={8} cta="OPEN" title="Report an incident" sub="Damage, injuries, or unsafe situations, within 24 hours" done={false} onPress={() => router.push("/incident")} testID="open-incident" />
               </View>
             </View>
           ) : null}

@@ -103,7 +103,7 @@ export default function Home() {
             <Card key={j.id} onPress={() => router.push({ pathname: "/job", params: { id: j.id } })} accessibilityLabel={`${STATUS_LABEL[j.status]}, ${j.vehicle.model}`} style={{ gap: 4 }} testID="job-card">
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                 <T style={{ fontFamily: t.f.displayX, fontSize: 16, flex: 1 }}>{j.warrantyReturn ? `Warranty return · ${STATUS_LABEL[j.status]}` : STATUS_LABEL[j.status]}</T>
-                <T v="small" style={{ fontFamily: t.f.bodyB }}>{money((j.final || j.quote).totalCents)}</T>
+                <T v="small" style={{ fontFamily: t.f.bodyB }}>{["cancelled", "expired"].includes(j.status) ? (j.cancelFeeCents ? `${money(j.cancelFeeCents)} fee` : "No charge") : j.final ? money(j.final.chargeCents) : money(j.quote.totalCents)}</T>
               </View>
               <T v="small">{[...j.quote.lines, ...j.quote.pending].map((l) => l.name).join(", ")}</T>
               <T v="hint">{j.vehicle.year} {j.vehicle.make} {j.vehicle.model} · {j.kind === "scheduled" ? fmtWindow(j.windowStart, j.windowEnd) : j.kind === "roadside" ? "Roadside" : "As soon as possible"}</T>

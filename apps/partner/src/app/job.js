@@ -145,8 +145,9 @@ export default function PartnerJob() {
           ) : (
             <>
               <Text style={{ fontFamily: fonts.displayX, fontSize: 18, color: p.ink }}>{job.area}</Text>
-              {job.distanceMiles != null ? <Text style={{ fontFamily: fonts.bodyB, fontSize: 14, color: p.brandText }}>{job.distanceMiles} miles away · about {job.driveMinutes} min</Text> : null}
-              <Text style={{ fontFamily: fonts.body, fontSize: 13, color: p.muted }}>The exact address unlocks when you tap Start trip.</Text>
+              {job.distanceMiles != null && ["requested", "awaiting_approval", "confirmed"].includes(s) ? <Text style={{ fontFamily: fonts.bodyB, fontSize: 14, color: p.brandText }}>{job.distanceMiles} miles away · about {job.driveMinutes} min</Text> : null}
+              {["requested", "awaiting_approval", "confirmed"].includes(s) ? <Text style={{ fontFamily: fonts.body, fontSize: 13, color: p.muted }}>The exact address unlocks when you tap Start trip.</Text>
+                : <Text style={{ fontFamily: fonts.body, fontSize: 13, color: p.muted }}>The street address is hidden once the job is over.</Text>}
             </>
           )}
           {job.notes ? <Text style={{ fontFamily: fonts.body, fontSize: 14, color: p.ink }}>Customer note: "{job.notes}"</Text> : null}

@@ -143,6 +143,8 @@ async function render() {
   $$("[data-tab]", main).forEach((b) => { b.onclick = () => { const [k, t] = b.dataset.tab.split("|"); S.tab[k] = t; render(); }; });
   $$("[data-go]", main).forEach((b) => { b.onclick = () => { const [v, t] = b.dataset.go.split("|"); go(v, t); }; });
   if (BIND[S.v]) BIND[S.v](main);
+  // Keep the sidebar counts current after anything staff do.
+  if (S.v !== "overview") api("GET", "/v1/admin/overview").then((o) => { counts = countsOf(o); side(); }).catch(() => {});
 }
 
 function drawer(html, bind) {
@@ -193,7 +195,7 @@ V.overview = async () => {
     <div class="kpi"><span>Jobs live now</span><b>${o.jobsLive}</b><small class="muted">on the way or working</small></div>
     <div class="kpi"><span>Waiting for a partner</span><b>${o.jobsWaiting}</b><small class="muted">requested or awaiting approval</small></div>
     <div class="kpi"><span>Completed today</span><b>${o.today.completed}</b><small class="muted">${money(o.today.chargedCents)} charged</small></div>
-    <div class="kpi"><span>Active partners</span><b>${o.partnersActive}</b><small class="muted">${o.customers} customers</small></div>
+    <div class="kpi"><span>Active partners</span><b>${o.partnersActive}</b><small class="muted">${o.customers} customer${o.customers === 1 ? "" : "s"}</small></div>
   </div>
   <div class="card"><div class="card-h"><h2>Needs attention</h2></div>
     ${att.length ? `<div class="att">${att.map(([, tone, text, to]) => `<button data-go="${to}"><span class="sev ${tone}"></span><span class="grow">${esc(text)}</span><span class="muted">›</span></button>`).join("")}</div>`
@@ -596,7 +598,7 @@ async function openClaim(id) {
     : `<div class="sec"><h3>Decision</h3>
       <div class="field"><label for="co">Outcome</label><select class="input" id="co"><option value="">Choose…</option><option value="pay">Partner at fault · pay the customer</option><option value="goodwill">Not proven · goodwill credit</option><option value="deny">Deny · damage was there before or unrelated</option></select></div>
       <div class="field"><label for="camt">Amount ($)</label><input class="input num" id="camt" type="number" min="0" step="0.01" value="${c.estimateCents ? c.estimateCents / 100 : ""}"></div>
-      <div class="field"><label for="cby">Paid by</label><select class="input" id="cby">${c.paidByOptions.map((k) => `<option value="${k}">${esc(PAID_BY[k])}</option>`).join("")}</select></div>
+      <div class="field" id="cbyf"><label for="cby">Paid by</label><select class="input" id="cby">${c.paidByOptions.map((k) => `<option value="${k}">${esc(PAID_BY[k])}</option>`).join("")}</select></div>
       <textarea class="input" id="cnote" placeholder="Explain the decision (both sides see it)"></textarea>
       ${c.status === "partner" ? `<label class="muted" style="font-size:13px"><input type="checkbox" id="cforce"> Decide now without waiting for the partner</label>` : ""}
       <div class="err" id="cerr" hidden></div>
@@ -606,6 +608,10 @@ async function openClaim(id) {
     $("[data-openjob]", d).onclick = () => openJob(c.jobId);
     const go = $("#cgo", d);
     if (!go) return;
+    // "Paid by" only applies when the customer is paid; the amount doesn't apply to a denial.
+    const showFields = () => { const o = $("#co", d).value; $("#cbyf", d).hidden = o !== "pay"; $("#camt", d).closest(".field").hidden = o === "deny"; };
+    $("#co", d).onchange = showFields;
+    showFields();
     go.onclick = async () => {
       const err = $("#cerr", d);
       err.hidden = true;

@@ -184,7 +184,7 @@ export default function JobScreen() {
         {job.status === "completed" && job.final ? (
           <Card style={{ gap: 6 }} testID="receipt">
             <T v="title">Receipt</T>
-            {job.final.lines.map((l) => <Row key={l.serviceId} left={l.name} right={money(l.priceCents, { always: true })} />)}
+            {job.final.lines.map((l) => <Row key={l.serviceId} left={job.addons.some((a) => a.kind === "addon" && a.status === "approved" && a.serviceId === l.serviceId) ? `${l.name} (added)` : l.name} right={money(l.priceCents, { always: true })} />)}
             {job.final.fees.map((f) => <Row key={f.id} hint left={f.label} right={money(f.cents, { always: true })} />)}
             <Row left="Total" right={money(job.final.totalCents, { always: true })} strong />
             {job.final.creditsCents ? <Row left="Account credit" right={money(-job.final.creditsCents, { always: true })} /> : null}
@@ -233,7 +233,7 @@ export default function JobScreen() {
           </Card>
         ) : null}
 
-        {job.payment && job.payment.enabled ? <PaymentCard job={job} busy={busy === "pay"}
+        {job.payment && job.payment.enabled && !job.warrantyReturn ? <PaymentCard job={job} busy={busy === "pay"}
           onPay={() => act("pay", () => call("payJob", job.id))} onCards={() => router.push("/cards")} /> : null}
 
         {job.photos && (job.photos.checkin.length || job.photos.after.length) ? (
