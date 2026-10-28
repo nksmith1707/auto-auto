@@ -53,8 +53,8 @@ EXPO_PUBLIC_API_URL=http://192.168.1.20:3000 npx expo start --clear
 
 | App | Screens so far |
 |---|---|
-| Customer (`apps/customer`) | Splash, Log in / Sign up, Forgot password, Enter reset code, Home (vehicles, places, account), Add/edit vehicle with VIN decode, Prices for each vehicle with a visit estimate, Book a visit (ASAP or a 2-hour window), Your visits, Visit details (approve partner, approve add-ons and glass quotes, reschedule, cancel with fee preview, receipt, inspection report, warranty), Add/edit saved place, Payment cards (add on Stripe's page, choose default, remove), payment status on each visit with Pay now if a card is declined, Edit your details, Log out, Log out on all devices |
-| Partner (`apps/partner`) | Splash, Log in, Apply (create partner account), Forgot password, Enter reset code, Application checklist (10 steps: service area, services, business & tax, ID check with Stripe, background check disclosure and authorization, insurance with certificate uploads, experience & certifications, safety standards, payouts, agreements with e-signatures; then review & submit), Service area (home base + travel radius), Services you offer (with pay per job), Open jobs and Your jobs (approved partners), Job screen (accept, start trip, arrive, check in, add-ons, glass quote, inspection, complete, no-show, cancel), Payouts (Stripe setup, balance, activity, instant cash-out), Log out, Log out on all devices |
+| Customer (`apps/customer`) | Splash, Log in / Sign up, Forgot password, Enter reset code, Home (vehicles, places, account), Add/edit vehicle with VIN decode, Prices for each vehicle with a visit estimate, Book a visit (ASAP or a 2-hour window), Your visits, Visit details (approve partner, approve add-ons and glass quotes, reschedule, cancel with fee preview, receipt, inspection report, warranty), Add/edit saved place, Payment cards (add on Stripe's page, choose default, remove), payment status on each visit with Pay now if a card is declined, visit photos, Service history for each vehicle, Edit your details, Log out, Log out on all devices |
+| Partner (`apps/partner`) | Splash, Log in, Apply (create partner account), Forgot password, Enter reset code, Application checklist (10 steps: service area, services, business & tax, ID check with Stripe, background check disclosure and authorization, insurance with certificate uploads, experience & certifications, safety standards, payouts, agreements with e-signatures; then review & submit), Service area (home base + travel radius), Services you offer (with pay per job), Open jobs and Your jobs (approved partners), Job screen (accept, start trip, arrive, 12 check-in photos with damage notes, check in, add-ons, after photos, glass quote, inspection, complete, no-show, cancel), Payouts (Stripe setup, balance, activity, instant cash-out), Log out, Log out on all devices |
 
 Notes:
 - Sessions are kept in the phone's secure storage (Keychain on iPhone, Keystore on Android), so people stay signed in until they log out or their session expires.
@@ -85,6 +85,16 @@ Set `STRIPE_SECRET_KEY` on the server (Render → the API service → Environmen
 - **Payouts:** partners set up a Stripe Express account from the app. Weekly (Mondays 9 PM Eastern) until 10 completed jobs, then daily at 9 PM. New partners have 5% held in reserve until daily payouts unlock. Instant cash-out costs $0.85.
 - **Test mode:** use card 4242 4242 4242 4242 with any future date, any CVC, any ZIP. Payouts in test mode need test money in the platform balance first: charge test card 4000 0000 0000 0077 once (its funds are available right away).
 - Not yet: parts cards (Stripe Issuing needs approval from Stripe), webhooks (the app checks status when people return from Stripe's pages).
+
+## Photos and proof of work
+
+- **Check-in:** after "I've arrived", the partner takes 12 photos (8 around the outside, 4 inside, including the dash and odometer). Tapping a photo lets them note existing damage. Work can't start until all 12 are in and the odometer is entered.
+- **After:** 2 after photos and the 8-item inspection are required before Complete.
+- **Customers** see the check-in photos once work starts, the after photos when it's done, and every finished visit in each vehicle's **Service history**.
+- **Incidents:** partners report damage, injuries, unsafe situations, or customer behavior from the job or home screen. Damage reports need at least one photo. Staff see them at `GET /v1/admin/incidents` and close them with a note.
+- Photos are shrunk on the phone (about 1600 pixels wide) and served through signed links that expire after 6 hours. Set `PHOTO_URL_SECRET` on the server (any long random text) so links keep working across restarts.
+- **Storage:** photos live in the database for now. A job's photos take about 3 MB, so move them to an object store (for example Cloudflare R2, about 10 GB free) before launch.
+- `REQUIRE_JOB_PHOTOS=off` turns the photo rule off (tests only).
 
 ## Partner applications (onboarding)
 
@@ -156,6 +166,13 @@ All requests and responses are JSON. Signed-in requests send `Authorization: Bea
 | POST | `/v1/admin/applications/:id/background` | Staff. Body: `status` (pending/clear/consider/adverse), `note` |
 | POST | `/v1/admin/applications/:id/identity` | Staff. Verify ID by hand. Body: `status`, `over21` |
 | POST | `/v1/admin/applications/:id/decision` | Staff. Body: `decision` (approve/return/deny), `note` |
+| POST | `/v1/jobs/:id/photos` | Partners. Body: `slot` (`e0`–`e7` outside, `i0`–`i3` inside, `a0`–`a1` after), `contentType`, `data` (base64). Check-in photos while arrived; after photos while working. Replaces that slot |
+| POST | `/v1/jobs/:id/photos/:slot/damage` | Partners. Body: `note`. Existing damage on a check-in photo |
+| GET | `/v1/photos/:id?exp=&sig=` | A photo, through the signed link the job gives you |
+| GET | `/v1/vehicles/:id/history` | Customers. Every finished visit: date, services, mileage, inspection, notes, partner, warranty, photos |
+| GET, POST | `/v1/incidents` | Partners. Their reports and the jobs they can report on; or a new report: `type`, `jobId`, `description`, `photos` (up to 4) |
+| GET | `/v1/admin/incidents?status=open` | Staff. Incident reports |
+| POST | `/v1/admin/incidents/:id/close` | Staff. Body: `note` |
 | GET | `/v1/payouts` | Partners. Balance, reserve, schedule, payouts, and activity |
 | POST | `/v1/payouts/account` | Partners. Body: `returnUrl`. Returns Stripe's payout setup `url` |
 | POST | `/v1/payouts/account/sync` | Partners. Checks whether payout setup is finished |

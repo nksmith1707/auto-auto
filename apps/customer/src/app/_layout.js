@@ -66,6 +66,7 @@ function Routes() {
             <Stack.Screen name="book" />
             <Stack.Screen name="job" />
             <Stack.Screen name="chat" />
+            <Stack.Screen name="history" />
             <Stack.Screen name="cards" />
           </Stack.Protected>
           <Stack.Protected guard={!signedIn}>

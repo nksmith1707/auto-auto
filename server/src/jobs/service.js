@@ -40,7 +40,7 @@ function parseTime(v, field) {
   return ms;
 }
 
-export function createJobs({ db, settings, geocode = null, payments = null, onboarding = null, now = () => Date.now(), log = () => {} }) {
+export function createJobs({ db, settings, geocode = null, payments = null, onboarding = null, photos = null, requirePhotos = false, now = () => Date.now(), log = () => {} }) {
   // Card charges talk to Stripe, so they run after the job change is saved, never inside a transaction.
   // A payment problem never undoes a job change; it shows on the job as a payment status instead.
   async function money(id, hook) {
@@ -221,6 +221,11 @@ export function createJobs({ db, settings, geocode = null, payments = null, onbo
     return Number((await t.get(`SELECT COUNT(*) AS n FROM jobs WHERE partner_id = $1 AND status = 'completed'`, [partnerId])).n);
   }
 
+  async function customerPhotos(t, job) {
+    const p = await photos.forJob(t, job.id);
+    return { checkin: p.checkin, after: job.status === "completed" ? p.after : [], damage: p.damage };
+  }
+
   async function customerView(t, job) {
     const s = await settingsFor(job.settings_version);
     const [vehicle, place, partner, addons, events] = await Promise.all([
@@ -249,6 +254,8 @@ export function createJobs({ db, settings, geocode = null, payments = null, onbo
       rescheduleCount: job.reschedule_count, freeReschedulesLeft: Math.max(0, FREE_RESCHEDULES - job.reschedule_count),
       partnerLate: partnerLate(job),
       payment: payments ? await payments.summary(job, t) : null,
+      // Check-in photos show once work starts; after photos once the job is done.
+      photos: photos && ["in_progress", "completed", "cancelled"].includes(job.status) ? await customerPhotos(t, job) : null,
       timeline: events,
       createdAt: job.created_at, updatedAt: job.updated_at,
     };
@@ -294,6 +301,7 @@ export function createJobs({ db, settings, geocode = null, payments = null, onbo
         cancelledAt: job.cancelled_at, cancelledBy: job.cancelled_by, cancelReason: job.cancel_reason, partnerCompCents: job.partner_comp_cents,
         freeCancelUntil: job.window_start - s.pcxFreeHrs * HOUR,
         inspectionItems: INSPECTION_ITEMS.map((k) => ({ key: k, label: INSPECTION_LABELS[k] })),
+        photos: photos ? await photos.forJob(t, job.id) : null, photosRequired: !!(photos && requirePhotos),
       });
     }
     return out;
@@ -549,6 +557,10 @@ export function createJobs({ db, settings, geocode = null, payments = null, onbo
       return db.tx(async (t) => {
         const job = await forPartner(t, user, id);
         need(job, ["arrived"], "Mark that you've arrived before checking in.");
+        if (photos && requirePhotos) {
+          const missing = await photos.missing(job.id, "checkin");
+          if (missing) throw conflict(`Take all 12 check-in photos before starting work. Still needed: ${missing.join(", ")}.`);
+        }
         const odo = typeof b.odometer === "number" ? b.odometer : Number(String(b.odometer ?? "").replace(/[,\s]/g, ""));
         if (!Number.isInteger(odo) || odo < 0 || odo > 1_500_000) throw bad("odometer", "Enter the odometer reading as a whole number of miles.");
         await update(t, job, { status: "in_progress", odometer_in: odo, work_started_at: now() });
@@ -656,6 +668,10 @@ export function createJobs({ db, settings, geocode = null, payments = null, onbo
       await db.tx(async (t) => {
         const job = await forPartner(t, user, id);
         need(job, ["in_progress"], "Check in before completing the job.");
+        if (photos && requirePhotos) {
+          const missing = await photos.missing(job.id, "after");
+          if (missing) throw conflict(`Take both after photos before completing. Still needed: ${missing.join(", ")}.`);
+        }
         const ins = b.inspection;
         if (!ins || typeof ins !== "object") throw bad("inspection", "Fill in the 8-item inspection report.");
         const clean = {};

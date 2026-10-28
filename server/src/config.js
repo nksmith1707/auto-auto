@@ -28,6 +28,10 @@ export function loadConfig(env = process.env) {
     stripeBaseUrl: env.STRIPE_BASE_URL || "https://api.stripe.com",
     // This server's public address, for links back from Stripe's pages. Render sets RENDER_EXTERNAL_URL itself.
     publicUrl: env.PUBLIC_URL || env.RENDER_EXTERNAL_URL || null,
+    // Check-in and after photos are required on every job. Tests that aren't about photos turn this off.
+    requireJobPhotos: env.REQUIRE_JOB_PHOTOS !== "off",
+    // Signs photo links. Set it so links keep working across restarts; without it a random one is made at start.
+    photoSecret: env.PHOTO_URL_SECRET || null,
     vinLookup: env.VIN_LOOKUP ? env.VIN_LOOKUP !== "off" : nodeEnv !== "test",
   };
   if (config.isProd && config.databaseUrl.startsWith("sqlite")) {

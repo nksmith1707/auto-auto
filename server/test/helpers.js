@@ -6,7 +6,7 @@ import { createMailer } from "../src/lib/mailer.js";
 
 // Starts a fresh API on a random port. Uses TEST_DATABASE_URL (Postgres in CI) or an in-memory SQLite database.
 export async function startTestApp(env = {}, opts = {}) {
-  const config = loadConfig({ NODE_ENV: "test", DATABASE_URL: process.env.TEST_DATABASE_URL || "sqlite::memory:", ALLOWED_ORIGINS: "https://ops.example.com", ...env });
+  const config = loadConfig({ NODE_ENV: "test", DATABASE_URL: process.env.TEST_DATABASE_URL || "sqlite::memory:", ALLOWED_ORIGINS: "https://ops.example.com", REQUIRE_JOB_PHOTOS: "off", ...env });
   const db = await openDb(config.databaseUrl);
   if (db.kind === "postgres") {
     // Start clean every run.

@@ -16,6 +16,8 @@ import { createPayments } from "./payments/service.js";
 import { paymentRoutes } from "./payments/routes.js";
 import { createOnboarding } from "./onboarding/service.js";
 import { onboardingRoutes } from "./onboarding/routes.js";
+import { createPhotos } from "./photos/service.js";
+import { photoRoutes } from "./photos/routes.js";
 
 export function createApp({ db, config, mailer = createMailer({ isProd: config.isProd }), log = console, vinFetch = config.vinLookup ? globalThis.fetch : null, mapsFetch = globalThis.fetch, stripeFetch = globalThis.fetch, now = () => Date.now() }) {
   const router = createRouter();
@@ -35,10 +37,12 @@ export function createApp({ db, config, mailer = createMailer({ isProd: config.i
   const stripe = createStripe({ secretKey: config.stripeSecretKey, baseUrl: config.stripeBaseUrl, fetchImpl: stripeFetch });
   const payments = createPayments({ db, stripe, settings, now, log: (m) => (log.log ? log.log(m) : undefined) });
   const onboarding = createOnboarding({ db, stripe, payments, now, log: (m) => (log.log ? log.log(m) : undefined) });
-  const jobs = createJobs({ db, settings, geocode, payments, onboarding, now, log: (m) => (log.log ? log.log(m) : undefined) });
+  const photos = createPhotos({ db, now, ...(config.photoSecret ? { secret: config.photoSecret } : {}) });
+  const jobs = createJobs({ db, settings, geocode, payments, onboarding, photos, requirePhotos: config.requireJobPhotos, now, log: (m) => (log.log ? log.log(m) : undefined) });
   jobRoutes(router, { db, auth, jobs, now });
   paymentRoutes(router, { auth, payments, jobs, config });
   onboardingRoutes(router, { auth, onboarding, config });
+  photoRoutes(router, { auth, photos });
 
   const server = http.createServer(async (req, res) => {
     const origin = req.headers.origin;
@@ -74,5 +78,5 @@ export function createApp({ db, config, mailer = createMailer({ isProd: config.i
   });
   server.requestTimeout = 15_000;
   server.headersTimeout = 10_000;
-  return { server, auth, mailer, settings, jobs, payments, onboarding };
+  return { server, auth, mailer, settings, jobs, payments, onboarding, photos };
 }

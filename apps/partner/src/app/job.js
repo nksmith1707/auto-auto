@@ -8,6 +8,7 @@ import { useAuth } from "../../../shared/session";
 import { Button, Checkbox, Field, LinkButton, Notice, Screen, T } from "../../../shared/ui";
 import { HeroFade } from "../components/Backdrops";
 import { TopBar } from "../components/TopBar";
+import { AFTER_SLOTS, CHECKIN_SLOTS, INTERIOR_SLOTS, PhotoGrid } from "../components/Photos";
 import { fonts, p } from "../theme";
 
 const LABEL = {
@@ -93,6 +94,10 @@ export default function PartnerJob() {
 
   const s = job.status;
   const startAt = job.canStartTripAt;
+  const ph = job.photos || { checkin: [], after: [], checkinNeeded: [], afterNeeded: [] };
+  const setPhotos = (photos) => setJob((j) => ({ ...j, photos }));
+  const checkinLeft = job.photosRequired ? ph.checkinNeeded.length : 0;
+  const afterLeft = job.photosRequired ? ph.afterNeeded.length : 0;
   const inspDone = (job.inspectionItems || []).every((it) => inspection[it.key] && (inspection[it.key].status === "good" || (inspection[it.key].note || "").trim().length >= 3));
 
   return (
@@ -160,10 +165,23 @@ export default function PartnerJob() {
 
         {s === "arrived" ? (
           <Box accent>
-            <Label>Check in</Label>
-            <Text style={{ fontFamily: fonts.body, fontSize: 14, color: p.ink }}>Before you start, note any existing damage and read the odometer. (Check-in photos come in a later update.)</Text>
+            <Label>Vehicle check-in</Label>
+            <Text style={{ fontFamily: fonts.body, fontSize: 14, color: p.ink }}>Walk around the {job.vehicle.make} {job.vehicle.model} and photograph every angle before touching it. Tap a photo after taking it to mark existing damage.</Text>
+            <Text style={{ fontFamily: fonts.bodyX, fontSize: 12, color: p.muted }} testID="checkin-count">{ph.checkin.length} OF 12 PHOTOS</Text>
+            <View style={{ height: 8, borderRadius: 5, backgroundColor: p.panel2, overflow: "hidden" }}><View style={{ width: `${(ph.checkin.length / 12) * 100}%`, height: "100%", backgroundColor: p.ok }} /></View>
+            <Label>360° walkaround</Label>
+            <PhotoGrid jobId={job.id} slots={CHECKIN_SLOTS} photos={ph.checkin} onChange={setPhotos} allowDamage />
+            <Label>Interior</Label>
+            <PhotoGrid jobId={job.id} slots={INTERIOR_SLOTS} photos={ph.checkin} onChange={setPhotos} allowDamage />
+            {ph.damage && ph.damage.length ? (
+              <View style={{ backgroundColor: p.badSoft, borderRadius: 12, padding: 10 }}>
+                <Text style={{ fontFamily: fonts.bodyB, fontSize: 13, color: p.ink }}>Existing damage noted: {ph.damage.map((d) => `${d.label}: ${d.note}`).join("; ")}. The customer sees this in their service record.</Text>
+              </View>
+            ) : null}
             <Field label="Odometer" value={odo} onChangeText={setOdo} keyboardType="number-pad" placeholder="84,500" testID="odometer" />
-            <Button title="Start work" onPress={() => go("check-in", { odometer: odo })} loading={busy === "check-in"} disabled={!odo.trim()} testID="check-in" />
+            <Button title={checkinLeft ? `Take ${checkinLeft} more photo${checkinLeft > 1 ? "s" : ""} to start` : odo.trim() ? "Start work" : "Enter the odometer reading"}
+              onPress={() => go("check-in", { odometer: odo })} loading={busy === "check-in"} disabled={!odo.trim() || checkinLeft > 0} testID="check-in" />
+            <Text style={{ fontFamily: fonts.body, fontSize: 12, color: p.muted }}>Photos are time-stamped. They protect you if there's a damage claim later.</Text>
             {nowTick >= job.noShowAllowedAt ? (
               <LinkButton title="Customer not here? Mark no-show" onPress={() => go("no-show")} style={{ alignSelf: "center" }} textStyle={{ color: p.bad }} />
             ) : (
@@ -239,13 +257,22 @@ export default function PartnerJob() {
               })}
               <Field label="Products used and notes (optional)" value={notes} onChangeText={setNotes} placeholder="5 qt 0W-20 full synthetic, filter PH7317" multiline />
             </Box>
-            <Button title="Complete job" big variant="okb" onPress={() => go("complete", { inspection, notes })} loading={busy === "complete"} disabled={!inspDone} testID="complete-job" />
-            {!inspDone ? <T v="hint" style={{ textAlign: "center" }}>Finish all 8 inspection items to complete.</T> : null}
+            <Box>
+              <Label>After photos (required)</Label>
+              <Text style={{ fontFamily: fonts.body, fontSize: 13, color: p.muted }}>Show the finished work and the condition you left the vehicle in.</Text>
+              <PhotoGrid jobId={job.id} slots={AFTER_SLOTS} photos={ph.after} onChange={setPhotos} testPrefix="after" />
+            </Box>
+            <Button title="Complete job" big variant="okb" onPress={() => go("complete", { inspection, notes })} loading={busy === "complete"} disabled={!inspDone || afterLeft > 0} testID="complete-job" />
+            {afterLeft ? <T v="hint" style={{ textAlign: "center" }}>Take both after photos to complete.</T> : !inspDone ? <T v="hint" style={{ textAlign: "center" }}>Finish all 8 inspection items to complete.</T> : null}
           </>
         ) : null}
 
-        {s === "completed" ? <Notice tone="ok">Done. Earnings are added to your balance. Payouts start when payments go live.</Notice> : null}
+        {s === "completed" ? <Notice tone="ok">Done. Your earnings are added to your balance. See Payouts for when they're paid.</Notice> : null}
         {s === "cancelled" ? <Notice>{job.cancelReason === "no_show" ? `No-show recorded. You keep ${money(job.partnerCompCents)}.` : job.partnerCompCents ? `The customer cancelled. You keep ${money(job.partnerCompCents)} of their fee.` : "This job was cancelled."}</Notice> : null}
+
+        {["en_route", "arrived", "in_progress", "completed"].includes(s) ? (
+          <LinkButton title="Report damage or an incident" onPress={() => router.push({ pathname: "/incident", params: { jobId: job.id } })} style={{ alignSelf: "center" }} textStyle={{ color: p.money }} />
+        ) : null}
 
         {["awaiting_approval", "confirmed", "en_route"].includes(s) ? (
           panel === "cancel" ? (

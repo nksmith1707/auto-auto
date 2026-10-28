@@ -165,6 +165,7 @@ export default function Home() {
                 <Step n={2} title="Services you offer" sub={`${user.partner.servicesCount} turned on`} done={!!user.partner.servicesCount} onPress={() => router.push("/services")} />
                 <Step n={3} title="Payouts" sub="Balance, cash out, and where we send your money" done={!!user.partner.payoutsEnabled} onPress={() => router.push("/payouts")} testID="step-payouts" />
                 <Step n={4} title="Insurance & documents" sub="Renew certificates before they expire" done={false} onPress={() => router.push("/onboarding/insurance")} testID="step-insurance-active" />
+                <Step n={5} title="Report an incident" sub="Damage, injuries, or unsafe situations, within 24 hours" done={false} onPress={() => router.push("/incident")} testID="open-incident" />
               </View>
             </View>
           ) : null}

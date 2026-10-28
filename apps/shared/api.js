@@ -119,6 +119,14 @@ export function createApi({ baseUrl = DEFAULT_API_URL, fetchImpl = globalThis.fe
     syncIdentity: (token) => request("POST", "/v1/onboarding/identity/sync", { token, body: {} }),
     submitApplication: (token, certify) => request("POST", "/v1/onboarding/submit", { token, body: { certify } }),
     optOutArbitration: (token) => request("POST", "/v1/onboarding/arbitration-opt-out", { token, body: {} }),
+
+    // Photos and proof of work. Photo links from the server are signed, so they open without a sign-in.
+    url: (path) => (/^https?:/.test(path) ? path : root + path),
+    uploadJobPhoto: (token, id, body) => request("POST", `/v1/jobs/${encodeURIComponent(id)}/photos`, { token, body, timeout: 120_000 }),
+    noteDamage: (token, id, slot, note) => request("POST", `/v1/jobs/${encodeURIComponent(id)}/photos/${encodeURIComponent(slot)}/damage`, { token, body: { note } }),
+    vehicleHistory: (token, id) => request("GET", `/v1/vehicles/${encodeURIComponent(id)}/history`, { token }),
+    incidents: (token) => request("GET", "/v1/incidents", { token }),
+    reportIncident: (token, body) => request("POST", "/v1/incidents", { token, body, timeout: 180_000 }),
   };
 }
 

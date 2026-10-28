@@ -134,6 +134,10 @@ export default function Home() {
               style={({ pressed }) => [styles.pricesBtn, pressed && { opacity: 0.85 }]}>
               <Text style={{ fontFamily: t.f.displayX, fontSize: 15, color: "#0A2A7A", letterSpacing: 0.3 }}>See prices for this vehicle ›</Text>
             </Pressable>
+            <Pressable onPress={() => router.push({ pathname: "/history", params: { vehicleId: v.id } })} accessibilityRole="button"
+              accessibilityLabel={`Service history for the ${v.year} ${v.make} ${v.model}`} testID="open-history" style={{ alignSelf: "center", paddingVertical: 4 }}>
+              <Text style={{ fontFamily: t.f.bodyX, fontSize: 14, color: "#fff" }}>Service history ›</Text>
+            </Pressable>
           </Card>
         ))}
       </View>

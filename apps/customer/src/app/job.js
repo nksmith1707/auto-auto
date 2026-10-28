@@ -7,6 +7,7 @@ import { STATUS_LABEL, bookingDays, fmtDay, fmtLeft, fmtTime, fmtWhen, fmtWindow
 import { useAuth } from "../../../shared/session";
 import { Button, Card, Chips, LinkButton, Notice, Screen, T, useTheme } from "../../../shared/ui";
 import { TopBar } from "../components/TopBar";
+import { VisitPhotos } from "../components/Photos";
 
 const STEPS = ["requested", "confirmed", "en_route", "arrived", "in_progress", "completed"];
 const STEP_LABEL = { requested: "Booked", confirmed: "Confirmed", en_route: "On the way", arrived: "Arrived", in_progress: "Working", completed: "Done" };
@@ -196,6 +197,14 @@ export default function JobScreen() {
 
         {job.payment && job.payment.enabled ? <PaymentCard job={job} busy={busy === "pay"}
           onPay={() => act("pay", () => call("payJob", job.id))} onCards={() => router.push("/cards")} /> : null}
+
+        {job.photos && (job.photos.checkin.length || job.photos.after.length) ? (
+          <Card style={{ gap: 10 }} testID="visit-photos">
+            <T v="title">Photos</T>
+            <T v="hint">Your partner photographs the vehicle before touching it and after the work. They're time-stamped and saved to your service history.</T>
+            <VisitPhotos photos={job.photos} />
+          </Card>
+        ) : null}
 
         {job.status === "completed" && job.inspection ? (
           <Card style={{ gap: 6 }}>
