@@ -50,7 +50,7 @@ export function createApp({ db, config, mailer = null, log = console, vinFetch =
   pricingRoutes(router, { db, auth, settings });
   const stripe = createStripe({ secretKey: config.stripeSecretKey, baseUrl: config.stripeBaseUrl, fetchImpl: stripeFetch });
   const payments = createPayments({ db, stripe, settings, notify, now, log: L });
-  const onboarding = createOnboarding({ db, stripe, payments, notify, now, log: L });
+  const onboarding = createOnboarding({ db, stripe, payments, notify, now, log: L, payoutSetupRequired: config.payoutSetupRequired });
   const photos = createPhotos({ db, now, ...(config.photoSecret ? { secret: config.photoSecret } : {}) });
   const jobs = createJobs({ db, settings, geocode, payments, onboarding, photos, notify, requirePhotos: config.requireJobPhotos, now, log: L });
   jobRoutes(router, { db, auth, jobs, now });

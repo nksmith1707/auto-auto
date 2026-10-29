@@ -30,6 +30,9 @@ export function loadConfig(env = process.env) {
     publicUrl: env.PUBLIC_URL || env.RENDER_EXTERNAL_URL || null,
     // Check-in and after photos are required on every job. Tests that aren't about photos turn this off.
     requireJobPhotos: env.REQUIRE_JOB_PHOTOS !== "off",
+    // Partners must finish Stripe payout setup to apply. PAYOUT_SETUP_REQUIRED=off lets them apply now and set it up
+    // later from the Payouts screen (while Stripe Connect isn't ready). Turn it back on before launch.
+    payoutSetupRequired: env.PAYOUT_SETUP_REQUIRED !== "off",
     // Signs photo links. Set it so links keep working across restarts; without it a random one is made at start.
     photoSecret: env.PHOTO_URL_SECRET || null,
     vinLookup: env.VIN_LOOKUP ? env.VIN_LOOKUP !== "off" : nodeEnv !== "test",

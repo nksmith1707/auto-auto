@@ -57,6 +57,8 @@ export default function Payouts() {
   const [note, setNote] = useState(null);
   const [confirm, setConfirm] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [later, setLater] = useState(false); // Staff let partners apply now and set up payouts later.
+  useEffect(() => { call("onboarding").then((o) => setLater(o.payouts && o.payouts.required === false)).catch(() => {}); }, [call]);
   const back = () => (router.canGoBack() ? router.back() : router.replace("/home"));
 
   const load = useCallback(async (sync) => {
@@ -126,6 +128,7 @@ export default function Payouts() {
               Stripe, our payment processor, pays you. They'll ask for your bank account or debit card and the details the IRS requires. Auto-Auto never sees your bank numbers.
             </Text>
             <Button title={info.account.connected ? "Continue setup" : "Set up payouts"} variant="money" onPress={setup} loading={busy === "setup"} testID="payout-setup" />
+            {later ? <Text style={{ fontFamily: fonts.body, fontSize: 13, lineHeight: 18, color: p.brandText }} testID="payout-later">You can skip this for now and set it up here later. Your earnings are still recorded, and they're paid out once it's set up.</Text> : null}
           </View>
         ) : (
           <View style={card}>

@@ -106,7 +106,7 @@ export function looksLike(type, buf) {
   return false;
 }
 
-export function createOnboarding({ db, notify = null, stripe = null, payments = null, now = () => Date.now(), log = () => {} }) {
+export function createOnboarding({ db, notify = null, stripe = null, payments = null, now = () => Date.now(), log = () => {}, payoutSetupRequired = true }) {
   const daysUntil = (date) => (date ? Math.floor((Date.parse(`${date}T12:00:00Z`) - now()) / DAY) : null);
 
   async function appRow(userId) {
@@ -251,7 +251,7 @@ export function createOnboarding({ db, notify = null, stripe = null, payments = 
         need(a.usedOilSite, "Tell us where you take used oil");
         break;
       case "payouts":
-        if (payments && payments.enabled && !(c.acct && c.acct.details_submitted)) e.push("Set up payouts with Stripe");
+        if (payoutSetupRequired && payments && payments.enabled && !(c.acct && c.acct.details_submitted)) e.push("Set up payouts with Stripe");
         if (!a.tax1099) e.push("Confirm the tax statement");
         if (!a.tips) e.push("Confirm the tips statement");
         break;
@@ -278,7 +278,7 @@ export function createOnboarding({ db, notify = null, stripe = null, payments = 
       agreements: AGREEMENT_IDS.map((id) => ({ id, title: documentById(id).title, signed: !!c.sigs[id] })),
       identity: { enabled: !!stripe, status: c.a.identity_status, over21: c.a.identity_over_21 == null ? null : !!c.a.identity_over_21, checkedAt: c.a.identity_checked_at },
       background: { status: c.a.background_status, ...(forStaff ? { note: c.a.background_note } : {}) },
-      payouts: { enabled: !!(payments && payments.enabled), detailsSubmitted: !!(c.acct && c.acct.details_submitted) },
+      payouts: { enabled: !!(payments && payments.enabled), detailsSubmitted: !!(c.acct && c.acct.details_submitted), required: payoutSetupRequired },
       arbitration: { optedOutAt: c.a.arbitration_opt_out_at, canOptOutUntil: c.sigs.arb && !c.a.arbitration_opt_out_at ? c.sigs.arb.signed_at + 30 * DAY : null },
     };
   }

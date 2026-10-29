@@ -109,6 +109,7 @@ Sections: **Overview** (what needs attention), **Jobs** (live, waiting, partner 
 - Photos are shrunk on the phone (about 1600 pixels wide) and served through signed links that expire after 6 hours. Set `PHOTO_URL_SECRET` on the server (any long random text) so links keep working across restarts.
 - **Storage:** photos live in the database for now. A job's photos take about 3 MB, so move them to an object store (for example Cloudflare R2, about 10 GB free) before launch.
 - `REQUIRE_JOB_PHOTOS=off` turns the photo rule off (tests only).
+- `PAYOUT_SETUP_REQUIRED=off` lets partners apply before finishing Stripe payout setup (set it up later from Payouts). Remove it before launch.
 
 ## Fleet (business accounts)
 
