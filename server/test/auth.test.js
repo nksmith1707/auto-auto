@@ -139,6 +139,16 @@ test("CORS only for allowed web origins", async () => {
   const bad = await fetch(app.base + "/v1/me", { method: "OPTIONS", headers: { Origin: "https://evil.example.com" } });
   assert.equal(bad.status, 403);
   assert.equal(bad.headers.get("access-control-allow-origin"), null);
+  // The apps running in a browser on your own computer (Expo web) are allowed.
+  for (const o of ["http://localhost:8081", "http://localhost:8082", "http://127.0.0.1:19006"]) {
+    const local = await fetch(app.base + "/v1/auth/signup", { method: "OPTIONS", headers: { Origin: o } });
+    assert.equal(local.status, 204, o);
+    assert.equal(local.headers.get("access-control-allow-origin"), o);
+  }
+  for (const o of ["http://localhost.evil.com", "https://localhost:8081.evil.com", "http://evil.com/localhost:8081"]) {
+    const no = await fetch(app.base + "/v1/me", { method: "OPTIONS", headers: { Origin: o } });
+    assert.equal(no.status, 403, o);
+  }
 });
 
 test("too many wrong passwords locks that email for a while", async () => {

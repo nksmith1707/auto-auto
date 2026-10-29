@@ -28,6 +28,8 @@ import { createEmail } from "./notify/providers.js";
 import { createCare } from "./care/service.js";
 import { careRoutes } from "./care/routes.js";
 
+const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?$/;
+
 export function createApp({ db, config, mailer = null, log = console, vinFetch = config.vinLookup ? globalThis.fetch : null, mapsFetch = globalThis.fetch, stripeFetch = globalThis.fetch, notifyFetch = globalThis.fetch, now = () => Date.now() }) {
   const router = createRouter();
   const L = (m) => (log.log ? log.log(m) : undefined);
@@ -65,7 +67,9 @@ export function createApp({ db, config, mailer = null, log = console, vinFetch =
 
   const server = http.createServer(async (req, res) => {
     const origin = req.headers.origin;
-    const cors = origin && config.allowedOrigins.includes(origin)
+    // Also allow the apps running in a web browser on your own computer (npx expo start, then w). Sign-in uses a
+    // token the app sends itself, never cookies, so other sites can't act as you through this.
+    const cors = origin && (config.allowedOrigins.includes(origin) || LOCAL_ORIGIN.test(origin))
       ? { "Access-Control-Allow-Origin": origin, "Vary": "Origin", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE", "Access-Control-Max-Age": "600" }
       : {};
     try {
