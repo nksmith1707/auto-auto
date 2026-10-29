@@ -84,7 +84,7 @@ export default function Cards() {
         {note ? <Notice tone="ok">{note}</Notice> : null}
         {err ? <Notice tone="bad">{err}</Notice> : null}
         {cfg && cfg.enabled ? <Button title="Add a card" onPress={add} loading={busy === "add"} testID="add-card" /> : null}
-        {cfg && cfg.testMode ? (
+        {cfg && cfg.enabled && cfg.testMode ? (
           <Notice>Test mode: no real money moves. Use card 4242 4242 4242 4242, any future date, any 3 digits, and any ZIP.</Notice>
         ) : null}
         <T v="hint" style={{ textAlign: "center" }}>Card numbers are saved by Stripe, our payment processor. Auto-Auto never sees or stores them.</T>

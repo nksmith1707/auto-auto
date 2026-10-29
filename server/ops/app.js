@@ -217,12 +217,12 @@ V.jobs = async () => {
   const f = tabOf("jobs", "open");
   const r = await api("GET", `/v1/admin/jobs?filter=${encodeURIComponent(f)}&q=${encodeURIComponent(S.q)}`);
   const rows = r.jobs.map((j) => `<tr class="click" data-job="${esc(j.id)}">
-    <td>${esc(j.services.join(", "))}${j.late ? ` ${pill("Partner late", "bad")}` : ""}</td>
+    <td>${esc(j.services.join(", "))}${j.warranty ? ` ${pill("Warranty return", "brand")}` : ""}${j.late ? ` ${pill("Partner late", "bad")}` : ""}</td>
     <td>${j.kind === "scheduled" ? when(j.windowStart) : esc(j.kind === "asap" ? "ASAP" : "Roadside")}</td>
     <td>${esc(j.customer || "—")}</td><td>${esc(j.partner || "—")}</td>
     <td>${pill(...(JOB_STATUS[j.status] || [j.status]))}</td>
     <td>${j.paymentStatus ? pill(...(PAY_STATUS[j.paymentStatus] || [j.paymentStatus])) : ""}</td>
-    <td class="r">${money(j.totalCents)}</td></tr>`).join("");
+    <td class="r">${["cancelled", "expired"].includes(j.status) ? (j.totalCents ? `${money(j.totalCents)} fee` : "No charge") : j.warranty ? "Free" : money(j.totalCents)}</td></tr>`).join("");
   return `<div class="ph"><div><h1>Jobs</h1><p>Every booking, live. Click one for the full record: timeline, photos, and payments.</p></div>
     <input class="input" id="jq" placeholder="Search customer, partner, or service" value="${esc(S.q)}" style="max-width:320px"></div>
   ${tabs("jobs", [["open", "Open"], ["live", "Live now"], ["waiting", "Waiting for partner"], ["late", "Partner late"], ["payment", "Card declined"], ["completed", "Completed"], ["cancelled", "Cancelled"], ["all", "All"]])}
@@ -436,7 +436,7 @@ V.insurance = async () => {
   return `<div class="ph"><div><h1>Insurance</h1><p>Every partner policy with its expiration. Partners can't take jobs while a required policy is expired.</p></div></div>
   <div class="tw"><table><thead><tr><th>Partner</th><th>Policy</th><th>Carrier · number</th><th>Expires</th><th>Certificate</th></tr></thead><tbody>
   ${list.map((x) => `<tr><td><b>${esc(x.partner)}</b><br><span class="muted">${esc(x.email)}</span></td><td>${esc(x.label)}</td><td>${esc(x.carrier || "—")} · ${esc(x.policyNumber || "—")}</td>
-    <td>${x.expires ? pill(`${x.expires}${x.daysLeft < 0 ? " · expired" : x.daysLeft < 30 ? ` · ${x.daysLeft} days` : ""}`, tone(x.daysLeft)) : pill("Missing", "bad")}</td>
+    <td>${x.expires ? pill(`${x.expires}${x.daysLeft < 0 ? " · expired" : x.daysLeft < 30 ? ` · ${x.daysLeft} day${x.daysLeft === 1 ? "" : "s"}` : ""}`, tone(x.daysLeft)) : pill("Missing", "bad")}</td>
     <td>${pill(...({ approved: ["Approved", "ok"], pending: ["Needs review", "warn"], rejected: ["Rejected", "bad"], missing: ["Not uploaded", "bad"] }[x.document]))}</td></tr>`).join("") || `<tr><td colspan="5" class="empty">No policies on file yet.</td></tr>`}
   </tbody></table></div>`;
 };
@@ -447,7 +447,7 @@ V.payouts = async () => {
   return `<div class="ph"><div><h1>Payouts</h1><p>Partner balances and payouts. Daily at 9 PM Eastern after 10 jobs; weekly on Mondays before that.</p></div></div>
   ${r.enabled ? "" : `<div class="note warn">Payments are off on this server (no Stripe key). Earnings are still recorded.</div>`}
   <div class="card"><div class="card-h"><h2>Balances</h2></div><div class="tw"><table><thead><tr><th>Partner</th><th>Schedule</th><th class="r">Available</th><th class="r">Reserve</th><th class="r">Held (claims)</th><th class="r">Owes</th><th>Last payout</th><th>Payouts</th></tr></thead><tbody>
-  ${r.partners.map((p) => `<tr><td><b>${esc(p.partner)}</b><br><span class="muted">${esc(p.email)}</span></td><td>${esc(p.schedule)} · ${p.jobsDone} jobs</td><td class="r">${money(p.availableCents)}</td><td class="r">${money(p.reserveCents)}</td><td class="r">${p.heldCents ? money(p.heldCents) : "—"}</td><td class="r">${p.owedCents ? money(p.owedCents) : "—"}</td><td>${p.lastPayout ? `${money(p.lastPayout.amountCents)} · ${when(p.lastPayout.at)}` : "—"}</td><td>${p.payoutsEnabled ? pill("On", "ok") : pill("Setup unfinished", "warn")}</td></tr>`).join("") || `<tr><td colspan="8" class="empty">No partners have set up payouts yet.</td></tr>`}
+  ${r.partners.map((p) => `<tr><td><b>${esc(p.partner)}</b><br><span class="muted">${esc(p.email)}</span></td><td>${esc(p.schedule)} · ${p.jobsDone} job${p.jobsDone === 1 ? "" : "s"}</td><td class="r">${money(p.availableCents)}</td><td class="r">${money(p.reserveCents)}</td><td class="r">${p.heldCents ? money(p.heldCents) : "—"}</td><td class="r">${p.owedCents ? money(p.owedCents) : "—"}</td><td>${p.lastPayout ? `${money(p.lastPayout.amountCents)} · ${when(p.lastPayout.at)}` : "—"}</td><td>${p.payoutsEnabled ? pill("On", "ok") : pill("Setup unfinished", "warn")}</td></tr>`).join("") || `<tr><td colspan="8" class="empty">No partners yet.</td></tr>`}
   </tbody></table></div></div>
   <div class="card"><div class="card-h"><h2>Recent payouts</h2></div><div class="tw"><table><thead><tr><th>Partner</th><th>Kind</th><th class="r">Amount</th><th class="r">Fee</th><th>Status</th><th>When</th></tr></thead><tbody>
   ${r.payouts.map((p) => `<tr><td>${esc(p.partner)}</td><td>${esc(p.kind)}</td><td class="r">${money(p.amountCents)}</td><td class="r">${money(p.feeCents)}</td><td>${p.status === "paid" ? pill("Paid", "ok") : pill(`Failed${p.error ? `: ${p.error}` : ""}`, "bad")}</td><td>${when(p.at)}</td></tr>`).join("") || `<tr><td colspan="6" class="empty">No payouts yet.</td></tr>`}
@@ -470,7 +470,7 @@ V.fleet = async () => {
   if (t === "runs") {
     const runs = (await api("GET", "/v1/admin/fleet-runs")).runs;
     return `${head}<div class="tw"><table><thead><tr><th>Visit</th><th>Fleet</th><th>When</th><th>Partner</th><th>Status</th><th class="r">Estimate</th></tr></thead><tbody>
-    ${runs.map((r) => `<tr class="click" data-frun="${esc(r.id)}"><td>#${r.number} · ${r.vehicles.length} vehicles</td><td>${esc(r.fleet.name)}</td><td>${when(r.windowStart)}</td><td>${esc(r.partner ? r.partner.name : "—")}</td><td>${pill(...R_STATUS[r.status])}</td><td class="r">${money(r.invoice ? r.invoice.totalCents : r.estimateCents)}</td></tr>`).join("") || `<tr><td colspan="6" class="empty">No fleet visits yet.</td></tr>`}
+    ${runs.map((r) => `<tr class="click" data-frun="${esc(r.id)}"><td>#${r.number} · ${r.vehicles.length} vehicle${r.vehicles.length === 1 ? "" : "s"}</td><td>${esc(r.fleet.name)}</td><td>${when(r.windowStart)}</td><td>${esc(r.partner ? r.partner.name : "—")}</td><td>${pill(...R_STATUS[r.status])}</td><td class="r">${money(r.invoice ? r.invoice.totalCents : r.estimateCents)}</td></tr>`).join("") || `<tr><td colspan="6" class="empty">No fleet visits yet.</td></tr>`}
     </tbody></table></div>`;
   }
   const inv = (await api("GET", `/v1/admin/fleet-invoices?status=${t === "paid" ? "paid" : "open"}`)).invoices;
@@ -545,7 +545,7 @@ V.claims = async () => {
     ${list.map((w) => `<tr><td>${esc(w.customer)}</td><td>${esc(w.originalServices.join(", "))}<br><span class="muted">${day(w.originalDoneAt)}</span></td><td>${esc({ same_problem: "Same problem is back", new_noise: "New noise or leak", warning_light: "Warning light", loose_missing: "Loose or missing part" }[w.issue] || w.issue)}${w.details ? `<br><span class="muted">${esc(w.details)}</span>` : ""}</td>
       <td>${esc(w.originalPartner)}</td><td>${pill(...(JOB_STATUS[w.status] || [w.status]))}<br><span class="muted">${w.returnPartner ? esc(w.returnPartner) : "No partner yet"} · ${when(w.windowStart)}</span> <button class="btn" data-openjob="${esc(w.returnJobId)}">Open</button></td>
       <td>${w.samePartner ? `<span class="muted">Same partner · no charge</span>` : `<label><input type="checkbox" data-cb="${esc(w.id)}" ${w.chargeBack ? "checked" : ""}> Bill original partner${w.debt ? ` (${money(w.debt.cents)})` : ""}</label>`}</td></tr>`).join("") || `<tr><td colspan="6" class="empty">No warranty returns yet.</td></tr>`}
-    </tbody></table></div><p class="muted" style="margin:0;font-size:13px">When the original partner can't return, another partner does the work and it's charged back to the original partner's payouts, unless you untick it.</p>`;
+    </tbody></table></div><p class="muted" style="margin:0;font-size:13px">When the original partner can't return, another partner does the work and it's charged back to the original partner's payouts, unless you uncheck it.</p>`;
   }
   if (t === "owed") {
     const list = (await api("GET", "/v1/admin/debts")).debts;

@@ -42,7 +42,7 @@ export default function FleetVisit() {
       <View style={{ gap: 14 }}>
         <View style={[card, { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }]}>
           <View><Text style={label}>{r.status === "completed" ? "You earned" : "Estimated earnings"}</Text><Text style={{ fontFamily: fonts.displayH, fontSize: 30, color: p.money }}>{money(r.pay.earningsCents)}</Text></View>
-          <Text style={[muted, { textAlign: "right" }]}>{r.vehicles.length} vehicles{r.pay.partsReimbursedCents ? `\n+ ${money(r.pay.partsReimbursedCents)} parts at cost` : ""}</Text>
+          <Text style={[muted, { textAlign: "right" }]}>{r.vehicles.length} vehicle{r.vehicles.length === 1 ? "" : "s"}{r.pay.partsReimbursedCents ? `\n+ ${money(r.pay.partsReimbursedCents)} parts at cost` : ""}</Text>
         </View>
         <View style={card}>
           {[["Fleet", r.fleet.name], ["When", fmtWindow(r.windowStart, r.windowEnd)], ["Yard", `${r.fleet.yard.street}, ${r.fleet.yard.city}`], ["Hours", r.fleet.yardHours], ["PO", r.po || "None"],
@@ -53,7 +53,7 @@ export default function FleetVisit() {
           <Text style={muted}>Business yard, so the address shows now. Each vehicle needs its own 12 photos and odometer reading.</Text>
         </View>
 
-        <Text style={label}>{r.status === "active" ? `${done} of ${r.vehicles.length} vehicles done` : "Vehicles"}</Text>
+        <Text style={label}>{r.status === "active" ? `${done} of ${r.vehicles.length} vehicle${r.vehicles.length === 1 ? "" : "s"} done` : "Vehicles"}</Text>
         {r.status === "active" ? <View style={{ height: 8, borderRadius: 5, backgroundColor: p.panel2, overflow: "hidden" }}><View style={{ width: `${(done / r.vehicles.length) * 100}%`, height: "100%", backgroundColor: p.ok }} /></View> : null}
         {r.vehicles.map((v, i) => (
           <Pressable key={v.id} disabled={r.status !== "active"} onPress={() => router.push({ pathname: "/fleet-vehicle", params: { id: r.id, rv: v.id } })} accessibilityRole="button" testID="fleet-visit-vehicle"

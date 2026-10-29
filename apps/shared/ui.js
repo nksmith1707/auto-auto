@@ -143,8 +143,8 @@ export function Chips({ label, value, onChange, options, error, allowNone = fals
           const on = v === value;
           return (
             <Pressable key={String(v)} onPress={() => onChange(on && allowNone ? null : v)} accessibilityRole="radio" accessibilityState={{ checked: on }}
-              style={[styles.chip, { borderColor: on ? t.c.brand : t.c.line, backgroundColor: on ? t.c.brand : t.c.inputBg }]}>
-              <Text style={{ fontFamily: t.f.bodyB, fontSize: 14, color: on ? "#fff" : t.c.ink }}>{l}</Text>
+              style={[styles.chip, { maxWidth: "100%", borderColor: on ? t.c.brand : t.c.line, backgroundColor: on ? t.c.brand : t.c.inputBg }]}>
+              <Text style={{ fontFamily: t.f.bodyB, fontSize: 14, color: on ? "#fff" : t.c.ink, flexShrink: 1 }}>{l}</Text>
             </Pressable>
           );
         })}

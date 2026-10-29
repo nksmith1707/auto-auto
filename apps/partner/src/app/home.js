@@ -1,6 +1,6 @@
 // Signed-in partner home. Until the partner is approved, this is their application status.
 import { useCallback, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { formatPhone, money } from "../../../shared/api";
@@ -42,6 +42,8 @@ function Step({ n, title, sub, done, onPress, testID, cta = "START" }) {
   return <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${title}${done ? ", done" : ""}`} testID={testID}>{body}</Pressable>;
 }
 
+// Long emails wrap onto a second line instead of being cut off on small phones.
+const WRAP = Platform.OS === "web" ? { wordBreak: "break-all" } : null;
 const KIND = { scheduled: "", asap: "ASAP", roadside: "ROADSIDE" };
 function JobList({ title, jobs, empty, onOpen, board }) {
   return (
@@ -52,7 +54,7 @@ function JobList({ title, jobs, empty, onOpen, board }) {
         <Pressable key={j.id} onPress={() => onOpen(j.id)} accessibilityRole="button" testID={board ? "board-job" : "my-job"}
           style={({ pressed }) => [styles.card, { gap: 4, padding: 14 }, pressed && { borderColor: p.brand }]}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <Text style={{ flex: 1, fontFamily: fonts.displayX, fontSize: 16, color: p.ink }} numberOfLines={1}>{j.services.map((x) => x.name).concat(j.pendingQuotes.map((x) => x.name)).join(", ")}</Text>
+            <Text style={{ flex: 1, fontFamily: fonts.displayX, fontSize: 16, color: p.ink }} numberOfLines={2}>{j.services.map((x) => x.name).concat(j.pendingQuotes.map((x) => x.name)).join(", ")}</Text>
             <Text style={{ fontFamily: fonts.displayX, fontSize: 16, color: p.money }}>{money((j.final ? j.final.partnerPay : j.pay).earningsCents)}{j.tipCents ? ` + ${money(j.tipCents)} tip` : ""}</Text>
           </View>
           <Text style={{ fontFamily: fonts.body, fontSize: 13, color: p.muted }}>
@@ -134,11 +136,10 @@ export default function Home() {
         <View style={{ flex: 1, width: "100%", maxWidth: 460, alignSelf: "center" }}>
           <View style={styles.top}>
             <View style={styles.avatar}><Text style={{ fontFamily: fonts.displayX, fontSize: 16, color: "#fff" }}>{initials}</Text></View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontFamily: fonts.bodyB, fontSize: 13, color: p.muted }}>Welcome</Text>
+            <View style={{ flex: 1, gap: 4 }}>
               <Text style={{ fontFamily: fonts.displayX, fontSize: 20, color: p.ink }} numberOfLines={1}>Hi, {user.firstName}</Text>
+              <View style={[styles.chip, { backgroundColor: chip.bg, alignSelf: "flex-start" }]}><Text style={[styles.chipText, { color: chip.fg }]}>{st.label}</Text></View>
             </View>
-            <View style={[styles.chip, { backgroundColor: chip.bg }]}><Text style={[styles.chipText, { color: chip.fg }]}>{st.label}</Text></View>
             <Bell onPress={() => router.push("/notifications")} color={p.ink} />
           </View>
 
@@ -221,7 +222,7 @@ export default function Home() {
             {[["Name", `${user.firstName} ${user.lastName}`], ["Email", user.email], ["Mobile", user.phone ? formatPhone(user.phone) : "Not added"]].map(([k, v], i) => (
               <View key={k} style={[styles.row, i > 0 && { borderTopWidth: 1, borderTopColor: p.line }]}>
                 <Text style={styles.label}>{k}</Text>
-                <Text style={{ fontFamily: fonts.body, fontSize: 15, color: p.ink, flexShrink: 1, textAlign: "right" }} selectable>{v}</Text>
+                <Text style={[{ fontFamily: fonts.body, fontSize: 15, color: p.ink, flexShrink: 1, textAlign: "right" }, WRAP]} selectable>{v}</Text>
               </View>
             ))}
           </View>

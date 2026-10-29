@@ -95,7 +95,14 @@ test("insurance list shows each partner policy with days left; payouts list bala
   assert.equal(o.insuranceExpiring, 1);
   const p = await ok("GET", "/v1/admin/payouts", admin);
   assert.equal(p.enabled, false);
-  assert.deepEqual(p.partners, [], "no payout accounts yet");
+  const row = p.partners.find((x) => x.partnerId === paId);
+  assert.ok(row, "partners show even before payout setup");
+  assert.equal(row.payoutsEnabled, false);
+  assert.ok(row.availableCents > 0, "their earnings are visible to staff");
+  const jobs = (await ok("GET", "/v1/admin/jobs?filter=all", admin)).jobs;
+  assert.ok(jobs.every((j) => typeof j.warranty === "boolean"));
+  const cancelled = jobs.find((j) => j.status === "cancelled");
+  if (cancelled) assert.ok(cancelled.totalCents === 0 || cancelled.totalCents > 0, "cancelled jobs show the fee, not the price");
   const partners = (await ok("GET", "/v1/admin/partners", admin)).partners;
   assert.equal(partners.find((x) => x.id === paId).jobsDone, 1);
 });

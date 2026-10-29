@@ -53,8 +53,10 @@ export function createAdmin({ db, jobs, photos, payments, notify = null, now = (
     const q = J(j.final, null) || J(j.quote, {});
     return {
       id: j.id, status: j.status, kind: j.kind, windowStart: j.window_start, windowEnd: j.window_end, createdAt: j.created_at,
-      services: J(j.service_ids, []).map((s) => (serviceById(s) || {}).name || s), customer: name(c), partner: name(pt),
-      totalCents: q.chargeCents ?? q.totalCents ?? null, paymentStatus: j.payment_status,
+      // Finished jobs list what was actually done, including approved add-ons.
+      services: j.final ? (J(j.final, {}).lines || []).map((l) => l.name) : J(j.service_ids, []).map((s) => (serviceById(s) || {}).name || s), customer: name(c), partner: name(pt),
+      totalCents: ["cancelled", "expired"].includes(j.status) ? j.cancel_fee_cents || 0 : q.chargeCents ?? q.totalCents ?? null, paymentStatus: j.payment_status,
+      warranty: !!j.comeback_of,
       late: j.status === "confirmed" && !j.trip_started_at && now() >= j.window_start - 30 * 60_000,
     };
   }
@@ -159,7 +161,11 @@ export function createAdmin({ db, jobs, photos, payments, notify = null, now = (
     insurance: policies,
 
     async payouts() {
-      const accts = await db.all(`SELECT a.*, u.first_name, u.last_name, u.email FROM payout_accounts a JOIN users u ON u.id = a.user_id`);
+      // Every partner with money on record or approved to work, including those who haven't finished payout setup.
+      const accts = await db.all(
+        `SELECT u.id AS user_id, u.first_name, u.last_name, u.email, a.payouts_enabled FROM users u JOIN partner_profiles p ON p.user_id = u.id LEFT JOIN payout_accounts a ON a.user_id = u.id
+         WHERE p.status IN ('active', 'paused') OR a.user_id IS NOT NULL OR EXISTS (SELECT 1 FROM partner_ledger l WHERE l.partner_id = u.id)`,
+      );
       const partners = [];
       for (const a of accts) {
         const info = await payments.payoutInfo({ id: a.user_id });

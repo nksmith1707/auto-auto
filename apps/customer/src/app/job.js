@@ -126,7 +126,7 @@ export default function JobScreen() {
             {STEPS.map((s, i) => (
               <View key={s} style={{ flex: 1, gap: 4, alignItems: "center" }}>
                 <View style={{ height: 6, width: "100%", borderRadius: 3, backgroundColor: i <= stepIdx ? t.c.brand : t.c.line }} />
-                <Text style={{ fontFamily: t.f.bodyB, fontSize: 10, color: i <= stepIdx ? t.c.brand : t.c.muted }} numberOfLines={1}>{STEP_LABEL[s]}</Text>
+                <Text style={{ fontFamily: t.f.bodyB, fontSize: 10, textAlign: "center", color: i <= stepIdx ? t.c.brand : t.c.muted }} numberOfLines={2}>{STEP_LABEL[s]}</Text>
               </View>
             ))}
           </View>

@@ -1,6 +1,6 @@
 // Signed-in home: vehicles, saved places, and account. Booking comes in later steps.
 import { useCallback, useState } from "react";
-import { Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { GradientFill } from "../../../shared/Fill";
 import { formatPhone, money } from "../../../shared/api";
@@ -13,6 +13,8 @@ import { forgetPush, registerPush } from "../../../shared/push";
 
 let askedForPush = false;
 
+// Long emails wrap onto a second line instead of being cut off on small phones.
+const WRAP = Platform.OS === "web" ? { wordBreak: "break-all" } : null;
 const FUEL = { gas: "Gas", diesel: "Diesel", hybrid: "Hybrid", electric: "Electric" };
 const PARK = { driveway: "Driveway", street: "Street parking", lot: "Parking lot", garage: "Garage", other: "Other" };
 
@@ -180,7 +182,7 @@ export default function Home() {
           {[["Name", `${user.firstName} ${user.lastName}`], ["Email", user.email], ["Mobile", user.phone ? formatPhone(user.phone) : "Not added"]].map(([k, v], i) => (
             <View key={k} style={[styles.row, i > 0 && { borderTopWidth: 1, borderTopColor: t.c.line }]}>
               <Text style={t.text.label}>{k}</Text>
-              <Text style={[t.text.body, { flexShrink: 1, textAlign: "right" }]} selectable>{v}</Text>
+              <Text style={[t.text.body, { flexShrink: 1, textAlign: "right" }, WRAP]} selectable>{v}</Text>
             </View>
           ))}
         </View>

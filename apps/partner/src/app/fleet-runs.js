@@ -22,7 +22,7 @@ function RunCard({ r, onPress }) {
         <Text style={{ fontFamily: fonts.displayX, fontSize: 16, color: p.money }}>{money(r.pay.earningsCents)}</Text>
       </View>
       <Text style={muted}>{fmtWindow(r.windowStart, r.windowEnd)} · {r.vehicles.length} vehicle{r.vehicles.length === 1 ? "" : "s"} · {r.fleet.yard.city}{r.distanceMiles != null ? ` · ${r.distanceMiles} mi` : ""}</Text>
-      <Text style={{ fontFamily: fonts.bodyB, fontSize: 12, color: ST[r.status][1] }}>{r.status === "active" ? `In progress · ${done}/${r.vehicles.length} vehicles` : ST[r.status][0]} · {r.services.map((s) => s.name).join(", ")}</Text>
+      <Text style={{ fontFamily: fonts.bodyB, fontSize: 12, color: ST[r.status][1] }}>{r.status === "active" ? `In progress · ${done}/${r.vehicles.length} vehicle${r.vehicles.length === 1 ? "" : "s"}` : ST[r.status][0]} · {r.services.map((s) => s.name).join(", ")}</Text>
     </Pressable>
   );
 }
