@@ -131,7 +131,12 @@ test("identity: Stripe checks the license and selfie; only the result and 21+ ar
   // Under 21 can't continue.
   const { url: u2 } = await ok("POST", "/v1/onboarding/identity", pb, { returnUrl: "exp://x/--/onboarding/identity" });
   stripe.finishIdentity(u2.split("/").pop(), { dob: { day: 1, month: 12, year: 2005 } });
-  s = await ok("POST", "/v1/onboarding/identity/sync", pb);
+  // Finished at Stripe but never sent back to the app: starting again picks up the finished check instead of a new one.
+  const sessions = Object.keys(stripe.state.identity).length;
+  s = await ok("POST", "/v1/onboarding/identity", pb, { returnUrl: "http://localhost:8082/onboarding/identity" });
+  assert.equal(s.url, undefined);
+  assert.equal(s.identity.status, "verified");
+  assert.equal(Object.keys(stripe.state.identity).length, sessions, "no new ID check started");
   assert.equal(s.identity.over21, false);
   assert.ok(step(s, "identity").errors.includes("You must be 21 or older to be a partner"));
 });

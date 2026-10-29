@@ -398,8 +398,13 @@ export function createOnboarding({ db, notify = null, stripe = null, payments = 
     async startIdentity(user, { returnTo, apiBase }) {
       await editable(user.id);
       if (!stripe) throw new HttpError(503, "identity_off", "ID checks aren't turned on yet. Partner support can verify you instead.");
-      const a = await appRow(user.id);
-      if (a.identity_status === "verified") return state(user.id);
+      let a = await appRow(user.id);
+      // A check already started: see how it went first, so a finished one isn't thrown away for a new one.
+      if (a.identity_session_id && a.identity_status !== "verified") {
+        try { await api.syncIdentity(user); } catch (e) { log(`[identity] couldn't check the last session: ${e.code || ""} ${e.message}`); }
+        a = await appRow(user.id);
+      }
+      if (a.identity_status === "verified" || a.identity_status === "processing") return state(user.id);
       const back = `${apiBase}/pay/return?to=${encodeURIComponent(returnTo || "")}&ok=1`;
       let s;
       try {

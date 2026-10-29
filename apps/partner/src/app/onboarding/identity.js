@@ -18,8 +18,14 @@ export default function Identity() {
   const { app, form, set, err, busy, call } = a;
   const params = useLocalSearchParams();
   const [problem, setProblem] = useState(null);
-  // Back from Stripe's page (on the web the app reloads here with ?done=1).
-  useEffect(() => { if (params.done) a.run("sync", () => call("syncIdentity")).then((s) => setProblem(s && s.identity.problem)); }, [params.done]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [checked, setChecked] = useState(false);
+  const sync = () => a.run("sync", () => call("syncIdentity")).then((s) => setProblem((s && s.identity.problem) || null));
+  // Back from Stripe's page (on the web the app reloads here with ?done=1), or opening this step with a check
+  // already started: ask Stripe how it went.
+  useEffect(() => {
+    if (!app || checked) return;
+    if (params.done || ["requires_input", "processing"].includes(app.identity.status)) { setChecked(true); sync(); }
+  }, [app, params.done]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function verify() {
     setProblem(null);
@@ -51,6 +57,7 @@ export default function Identity() {
             <Text style={{ fontFamily: fonts.bodyB, fontSize: 14, color: stColor }} testID="id-status">Status: {stLabel}{id && id.status === "verified" && id.over21 === false ? " · under 21" : ""}</Text>
             {problem ? <Text style={[muted, { color: p.bad }]}>{problem}</Text> : null}
             {!id.enabled ? <Text style={muted}>ID checks aren't turned on yet. Partner support will verify you instead.</Text>
+              : id.status === "processing" ? <Button title="Check again" variant="ghost" onPress={sync} loading={busy === "sync"} testID="check-id" />
               : id.status !== "verified" && !app.locked ? <Button title={id.status === "not_started" ? "Verify with Stripe" : "Continue ID check"} variant="money" onPress={verify} loading={busy === "verify" || busy === "sync"} testID="verify-id" /> : null}
           </Section>
         </>

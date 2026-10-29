@@ -7,9 +7,11 @@ import * as WebBrowser from "expo-web-browser";
 export const returnUrl = (path) => Linking.createURL(path);
 
 // start(returnUrl) asks our server for the Stripe link. Resolves when the person is back in the app.
+// No link back means there's nothing to open (for example, the ID check already finished).
 export async function openStripePage(path, start) {
   const back = returnUrl(path);
-  const { url } = await start(back);
+  const { url } = (await start(back)) || {};
+  if (!url) return { finished: true, opened: false };
   if (Platform.OS === "web") {
     window.location.assign(url);
     return new Promise(() => {}); // The page is leaving.

@@ -60,7 +60,12 @@ export default function Payouts() {
   const back = () => (router.canGoBack() ? router.back() : router.replace("/home"));
 
   const load = useCallback(async (sync) => {
-    try { setInfo(await call(sync ? "syncPayouts" : "payouts")); setErr(null); } catch (e) { setErr(e.message); }
+    try {
+      let r = await call(sync ? "syncPayouts" : "payouts");
+      // Started with Stripe but not finished here: ask Stripe, in case they finished it and came back another way.
+      if (!sync && r.account && r.account.connected && !r.account.payoutsEnabled) r = await call("syncPayouts");
+      setInfo(r); setErr(null);
+    } catch (e) { setErr(e.message); }
   }, [call]);
   useEffect(() => { load(!!params.done); }, [load, params.done]);
 

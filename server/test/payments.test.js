@@ -47,7 +47,9 @@ test("return links only go back into the apps", () => {
   assert.equal(safeReturn("exp://192.168.1.5:8081/--/cards", { isProd: true }), "exp://192.168.1.5:8081/--/cards");
   assert.equal(safeReturn("autoauto://cards", { isProd: true }), "autoauto://cards");
   assert.equal(safeReturn("https://evil.example.com", { isProd: false }), null);
-  assert.equal(safeReturn("http://localhost:8081/cards", { isProd: true }), null);
+  assert.equal(safeReturn("http://localhost:8081/cards", { isProd: true }), "http://localhost:8081/cards");
+  assert.equal(safeReturn("http://localhost.evil.com/cards", { isProd: true }), null);
+  assert.equal(safeReturn("http://user@localhost:8081/cards", { isProd: true }), null);
   assert.equal(safeReturn("http://localhost:8081/cards", { isProd: false }), "http://localhost:8081/cards");
   assert.equal(safeReturn("javascript:alert(1)", { isProd: false }), null);
 });

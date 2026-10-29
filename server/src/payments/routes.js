@@ -2,13 +2,14 @@
 import { readJson, send, HttpError } from "../lib/http.js";
 import { requireUser } from "../auth/routes.js";
 
-// Where /pay/return may send people: the phone apps (and Expo Go while testing), or a local web build outside production.
-export function safeReturn(to, { isProd }) {
+// Where /pay/return may send people: the phone apps (and Expo Go while testing), or the apps running in a browser
+// on the person's own computer (localhost only, which can't point anywhere else).
+export function safeReturn(to) {
   if (!to) return null;
   let u;
   try { u = new URL(to); } catch { return null; }
   if (["autoauto:", "autoautopartner:", "exp:", "exps:"].includes(u.protocol)) return u.toString();
-  if (!isProd && u.protocol === "http:" && ["localhost", "127.0.0.1"].includes(u.hostname)) return u.toString();
+  if (u.protocol === "http:" && ["localhost", "127.0.0.1"].includes(u.hostname) && !u.username && !u.password) return u.toString();
   return null;
 }
 
